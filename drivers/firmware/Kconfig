@@ -279,9 +279,8 @@ config QCOM_SCM_QCPE
 	  front-end to back-end communication.
 
 config QTEE_SHM_BRIDGE
-	bool "QTI TEE shared memory bridge"
+	tristate "QTI TEE shared memory bridge"
 	depends on QCOM_SCM
-	default y if QCOM_SCM
 	help
 	  QTEE shared memory bridge driver provides kernel APIs to share
 	  memory between trustzone & other VMs through shared memory bridge.
