@@ -152,8 +152,9 @@
 #define IPA_IOCTL_SET_EXT_ROUTER_MODE           95
 #define IPA_IOCTL_ADD_DEL_DSCP_PCP_MAPPING      96
 #define IPA_IOCTL_SEND_VLAN_MUXID_MAPPING       97
-#define IPA_IOCTL_SEND_TUNNEL_TEMPLATE_INFO       98
-#define IPA_IOCTL_QUERY_TUNNEL_FEATURE       99
+#define IPA_IOCTL_SEND_TUNNEL_TEMPLATE_INFO     98
+#define IPA_IOCTL_QUERY_TUNNEL_FEATURE          99
+#define IPA_IOCTL_ADD_IPOGRE_MAPPING            100
 /**
  * max size of the header to be inserted
  */
@@ -976,8 +977,12 @@ enum ipa_eth_pdu_evt {
 #define IPA_ENABLE_ETH_PDU_MODE_EVENT_MAX IPA_ENABLE_ETH_PDU_MODE_EVENT_MAX
 };
 
-
-#define IPA_EVENT_MAX_NUM (IPA_ENABLE_ETH_PDU_MODE_EVENT_MAX)
+enum ipa_ipogre_event {
+	IPA_IPOGRE_NOTIFY_EVENT = IPA_ENABLE_ETH_PDU_MODE_EVENT_MAX,
+	IPA_IPOGRE_EVENT_MAX
+#define IPA_IPOGRE_EVENT_MAX IPA_IPOGRE_EVENT_MAX
+};
+#define IPA_EVENT_MAX_NUM (IPA_IPOGRE_EVENT_MAX)
 #define IPA_EVENT_MAX ((int)IPA_EVENT_MAX_NUM)
 
 /**
@@ -1551,9 +1556,11 @@ enum ipa_hdr_proc_type {
 	IPA_HDR_PROC_EoGRE_HEADER_REMOVE,
 	IPA_HDR_PROC_WWAN_TO_ETHII_EX,
 	IPA_HDR_PROC_GRE_HEADER_ADD,
-	IPA_HDR_PROC_GRE_HEADER_REMOVE
+	IPA_HDR_PROC_GRE_HEADER_REMOVE,
+	IPA_HDR_PROC_IPOGRE_HEADER_ADD,
+	IPA_HDR_PROC_IPOGRE_HEADER_REMOVE
 };
-#define IPA_HDR_PROC_MAX (IPA_HDR_PROC_GRE_HEADER_REMOVE + 1)
+#define IPA_HDR_PROC_MAX (IPA_HDR_PROC_IPOGRE_HEADER_REMOVE + 1)
 
 /**
  * struct ipa_rt_rule - attributes of a routing rule
@@ -1958,6 +1965,68 @@ struct ipa_ioc_eogre_info {
 	struct IpaDscpVlanPcpMap_t map_info;
 };
 
+#define MAX_FLOW_PER_IPOGRE_TUNNEL 10
+
+/**
+ * struct ipa_ipogre_info -
+ * @ipv4_src:          Specifies source v4 address if GRE tunnel is ipv4
+ * @ipv4_dst:          Specifies destination v4 address if GRE tunnel is ipv4
+ * @ipv6_src:          Specifies source v6 address if GRE tunnel is ipv6
+ * @ipv6_dst:          Specifies destination v6 address if GRE tunnel is ipv6
+ * @iptype:            Specifies GRE tunnel's ip address type
+ * @tunnel_id:         Specifies tunnel id
+ */
+
+struct ipa_ipogre_tunnel_info {
+	uint32_t ipv4_src;
+	uint32_t ipv4_dst;
+	uint32_t ipv6_src[4];
+	uint32_t ipv6_dst[4];
+	enum ipa_ip_type iptype;
+	uint8_t tunnel_id;
+} __packed;
+
+/**
+ * struct ipa_ipogre_info -
+ * @ipv4_src:          Specifies source v4 address if GRE tunnel is ipv4
+ * @ipv4_src_subnet:   Specifies source v4 address subnet if GRE tunnel is ipv4
+ * @ipv4_dst:          Specifies destination v4 address if GRE tunnel is ipv4
+ * @ipv4_dst_subnet:   Specifies destination v4 address subnet if GRE tunnel is ipv4
+ * @ipv6_src:          Specifies source v6 address if GRE tunnel is ipv6
+ * @ipv6_src_subnet:   Specifies source v6 address subnet if GRE tunnel is ipv6
+ * @ipv6_dst:          Specifies destination v6 address if GRE tunnel is ipv6
+ * @ipv6_dst_subnet:   Specifies destination v6 address subnet if GRE tunnel is ipv6
+ * @iptype:            Specifies GRE tunnel's ip address type
+ * @protocol:          Specifies protocol of the data traffic
+ */
+
+struct ipa_ipogre_flow_info {
+	uint32_t ipv4_src;
+	uint32_t ipv4_src_subnet;
+	uint32_t ipv4_dst;
+	uint32_t ipv4_dst_subnet;
+	uint32_t ipv6_src[4];
+	uint32_t ipv6_dst[4];
+	uint32_t src_port;
+	uint32_t dst_port;
+	enum ipa_ip_type iptype;
+	uint8_t protocol;
+	uint8_t ipv6_src_subnet;
+	uint8_t ipv6_dst_subnet;
+} __packed;
+
+/**
+ * struct ipa_ipogre_info -
+ * @ipogre_tunnel_info:    Specifies tunnel information
+ * @ipogre_flow_info:      Specifies flows to be offloaded
+ * @ipa_ipogre_num_flow:   Specifies number of flow to be offloaded
+ */
+
+struct ipa_ioc_ipogre_info {
+	struct ipa_ipogre_tunnel_info ipogre_tunnel_info;
+	struct ipa_ipogre_flow_info ipogre_flow_info[MAX_FLOW_PER_IPOGRE_TUNNEL];
+	uint8_t ipa_ipogre_num_flow;
+};
 /**
  * struct ipa_eogre_header_add_procparams -
  * @eth_hdr_retained:  Specifies if Ethernet header is retained or not
@@ -2050,6 +2119,45 @@ struct ipa_gre_hdr_proc_ctx_params {
 };
 
 /**
+ * struct ipa_ipogre_header_add_procparams -
+ * @input_ip_version:  Specifies if Input header is IPV4(0) or IPV6(1)
+ * @output_ip_version: Specifies if template header's outer IP is IPV4(0)
+ * or IPV6(1)
+ * @Tunnel_Id: Tunnel id associated with the header.
+ * @Mux_Id: Specifies mux id associated with the template header
+ */
+struct ipa_ipogre_header_add_procparams {
+	uint32_t input_ip_version    : 1;
+	uint32_t output_ip_version   : 1;
+	uint32_t tunnel_id           : 4;
+	uint32_t mux_id              : 8;
+	uint32_t reserved            :18;
+};
+
+/**
+ * struct ipa_ipogre_header_remove_procparams -
+ * @hdr_len_remove:    Specifies how much (in bytes) of the header needs
+ *                     to be removed
+ * @input_ip_version:  Specifies if Input header is IPV4(0) or IPV6(1)
+ * @Tunnel_Id: Tunnel id associated with the header.
+ */
+struct ipa_ipogre_header_remove_procparams {
+	uint32_t hdr_len_remove      : 8;
+	uint32_t input_ip_version    : 1;
+	uint32_t tunnel_id           : 4;
+	uint32_t reserved            :19;
+};
+
+/**
+ * struct ipa_ipogre_hdr_proc_ctx_params -
+ * @hdr_add_param: parameters for header add
+ * @hdr_remove_param: parameters for header remove
+ */
+struct ipa_ipogre_hdr_proc_ctx_params {
+	struct ipa_ipogre_header_add_procparams hdr_add_param;
+	struct ipa_ipogre_header_remove_procparams hdr_remove_param;
+};
+/**
  * struct ipa_eth_II_to_eth_II_ex_procparams -
  * @input_ethhdr_negative_offset: Specifies where the ethernet hdr offset is
  *	(in bytes) from the start of the input IP hdr
@@ -2111,6 +2219,7 @@ struct ipa_hdr_proc_ctx_add {
 	struct ipa_eth_II_to_eth_II_ex_procparams generic_params;
 	struct ipa_wwan_to_eth_II_ex_procparams generic_params_v2;
 	struct ipa_gre_hdr_proc_ctx_params gre_params;
+	struct ipa_ipogre_hdr_proc_ctx_params ipogre_params;
 };
 
 #define IPA_L2TP_HDR_PROC_SUPPORT
@@ -4220,6 +4329,10 @@ struct ipa_ioc_dscp_pcp_map_info {
 #define IPA_IOC_QUERY_TUNNEL_FEATURE _IOW(IPA_IOC_MAGIC, \
 				IPA_IOCTL_QUERY_TUNNEL_FEATURE, \
 				uint8_t)
+
+#define IPA_IOC_ADD_IPoGRE_MAPPING _IOWR(IPA_IOC_MAGIC, \
+				IPA_IOCTL_ADD_IPOGRE_MAPPING, \
+				struct ipa_ioc_ipogre_info)
 
 /*
  * unique magic number of the Tethering bridge ioctls
