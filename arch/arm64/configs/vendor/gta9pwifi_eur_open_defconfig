@@ -4741,6 +4741,11 @@ CONFIG_ION_POOL_FILL_MARK=100
 # CONFIG_STAGING_GASKET_FRAMEWORK is not set
 # end of Gasket devices
 
+#
+# Qualcomm Atheros CLD WLAN module
+#
+CONFIG_QCA_CLD_WLAN=m
+
 # CONFIG_XIL_AXIS_FIFO is not set
 # CONFIG_FIELDBUS_DEV is not set
 # CONFIG_KPC2000 is not set
