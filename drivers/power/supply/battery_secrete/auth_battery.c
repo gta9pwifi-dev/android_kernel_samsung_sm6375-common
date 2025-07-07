@@ -812,7 +812,7 @@ static int __init auth_battery_init(void)
 {
 	struct auth_data *info;
 	struct power_supply_config cfg = { };
-	int ret = 0;
+	int __maybe_unused ret = 0;
 
 	pr_info("%s enter\n", __func__);
 	if (get_auth_board_id() == 0)
