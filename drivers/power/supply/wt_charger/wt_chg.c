@@ -170,7 +170,7 @@ static int wtchg_hv_disable(struct wt_chg *chg, int batt_hv_disable);
 //-ReqP86801AA1-3595, liyiying.wt, add, 20230801, Configure SEC_BAT_CURRENT_EVENT_HV_DISABLE
 
 //+bug794981, tankaikun@wt, add 20220908, fix offmode usb/sdp charge timeout
-static int get_boot_mode(){
+static int get_boot_mode(void){
 	char *bootmode_string = NULL;
 	char bootmode_start[32] = " ";
 	int rc;
