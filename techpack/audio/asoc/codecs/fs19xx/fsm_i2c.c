@@ -36,12 +36,12 @@ static struct device *g_fsm_pdev = NULL;
 //#include "fsm_q6afe.c"
 //#include "fsm_codec.c"
 
-void fsm_mutex_lock()
+void fsm_mutex_lock(void)
 {
 	mutex_lock(&g_fsm_mutex);
 }
 
-void fsm_mutex_unlock()
+void fsm_mutex_unlock(void)
 {
 	mutex_unlock(&g_fsm_mutex);
 }
