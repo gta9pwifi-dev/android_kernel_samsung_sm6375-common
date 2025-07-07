@@ -605,7 +605,7 @@ static void sha_prepareSchedule(char* message)
 static void sha256_hashblock(char* message, ushort lastblock)
 {
    ushort sha1counter = 0;
-   ushort sha1functionselect = 0;
+   ushort __maybe_unused sha1functionselect = 0;
    ushort i;
    ulong nodeT1, nodeT2;
 
