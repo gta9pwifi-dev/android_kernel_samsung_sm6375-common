@@ -257,7 +257,7 @@ static const unsigned int rpm_extcon_cable[] = {
 #endif 
 //+bug814754, tankaikun@wt, add 20221108, fix offmode usb/sdp charge check error
 #ifdef CONFIG_QGKI_BUILD
-static int get_boot_mode(){
+static int get_boot_mode(void){
 	char *bootmode_string = NULL;
 	char bootmode_start[32] = " ";
 	int rc;
