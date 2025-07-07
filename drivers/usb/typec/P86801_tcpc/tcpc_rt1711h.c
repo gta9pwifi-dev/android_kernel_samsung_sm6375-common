@@ -1045,7 +1045,7 @@ static inline int rt1711_fault_status_vconn_ov(struct tcpc_device *tcpc)
 
 int rt1711_fault_status_clear(struct tcpc_device *tcpc, uint8_t status)
 {
-	int ret = 0;
+	int __maybe_unused ret = 0;
 
 	if (status & TCPC_V10_REG_FAULT_STATUS_VCONN_OV)
 		ret = rt1711_fault_status_vconn_ov(tcpc);
