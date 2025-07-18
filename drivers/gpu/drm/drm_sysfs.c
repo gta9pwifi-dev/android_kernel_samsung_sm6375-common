@@ -237,17 +237,45 @@ static ssize_t modes_show(struct device *device,
 
 	return written;
 }
+//+P86801AA1,liuyongliang.wt,add,2023.06.05, add mipi node reg funtion
+#ifdef CONFIG_QGKI_BUILD
+static ssize_t mipi_reg_show(struct device *device,
+							  struct device_attribute *attr,
+							  char *buf)
+{
+	struct drm_connector *connector = to_drm_connector(device);
+	return dsi_display_mipi_reg_read(connector, buf);
+}
 
+static ssize_t mipi_reg_store(struct device *device,
+							  struct device_attribute *attr,
+							  const char *buf, size_t count)
+{
+	struct drm_connector *connector = to_drm_connector(device);
+	return dsi_display_mipi_reg_write(connector, (char *)buf, count);;
+}
+#endif
+//-P86801AA1,liuyongliang.wt,add,2023.06.05, add mipi node reg funtion
 static DEVICE_ATTR_RW(status);
 static DEVICE_ATTR_RO(enabled);
 static DEVICE_ATTR_RO(dpms);
 static DEVICE_ATTR_RO(modes);
+//+P86801AA1,liuyongliang.wt,add,2023.06.05, add mipi node reg funtion
+#ifdef CONFIG_QGKI_BUILD
+static DEVICE_ATTR_RW(mipi_reg);
+#endif
+//-P86801AA1,liuyongliang.wt,add,2023.06.05, add mipi node reg funtion
 
 static struct attribute *connector_dev_attrs[] = {
 	&dev_attr_status.attr,
 	&dev_attr_enabled.attr,
 	&dev_attr_dpms.attr,
 	&dev_attr_modes.attr,
+	//+P86801AA1,liuyongliang.wt,add,2023.06.05, add mipi node reg funtion
+        #ifdef CONFIG_QGKI_BUILD
+	&dev_attr_mipi_reg.attr,
+        #endif
+	//-P86801AA1,liuyongliang.wt,add,2023.06.05, add mipi node reg funtion
 	NULL
 };
 

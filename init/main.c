@@ -94,6 +94,7 @@
 #include <linux/rodata_test.h>
 #include <linux/jump_label.h>
 #include <linux/mem_encrypt.h>
+#include <linux/memblock.h>
 
 #include <asm/io.h>
 #include <asm/bugs.h>
@@ -106,6 +107,13 @@
 
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
 #include <soc/qcom/boot_stats.h>
+#endif
+
+#include <linux/samsung/debug/sec_kboot_stat.h>
+
+#ifdef CONFIG_SECURITY_DEFEX
+#include <linux/defex.h>
+void __init __weak defex_load_rules(void) { }
 #endif
 
 static int kernel_init(void *);
@@ -139,6 +147,9 @@ void (*__initdata late_time_init)(void);
 char __initdata boot_command_line[COMMAND_LINE_SIZE];
 /* Untouched saved command line (eg. for /proc) */
 char *saved_command_line;
+/*+P86801AA1-1797,wangkangmin.wt,ADD,20230626, add for gki build*/
+EXPORT_SYMBOL_GPL(saved_command_line);
+/*-P86801AA1-1797,wangkangmin.wt,ADD,20230626, add for gki build*/
 /* Command line for parameter parsing */
 static char *static_command_line;
 /* Command line for per-initcall parameter parsing */
@@ -200,8 +211,15 @@ static bool __init obsolete_checksetup(char *line)
 				pr_warn("Parameter %s is obsolete, ignored\n",
 					p->str);
 				return true;
-			} else if (p->setup_func(line + n))
-				return true;
+			} else {
+				int ret;
+
+				memblock_memsize_set_name(p->str);
+				ret = p->setup_func(line + n);
+				memblock_memsize_unset_name();
+				if (ret)
+					return true;
+			}
 		}
 		p++;
 	} while (p < __setup_end);
@@ -249,6 +267,27 @@ static int __init loglevel(char *str)
 }
 
 early_param("loglevel", loglevel);
+
+#if IS_ENABLED(CONFIG_RTC_AUTO_PWRON_PARAM)
+unsigned int sapa_param_time;
+EXPORT_SYMBOL(sapa_param_time);
+
+static int __init read_sapa_param(char *str)
+{
+	int temp = 0;
+
+	if (get_option(&str, &temp)) {
+		sapa_param_time = (unsigned int)temp;
+		pr_info("[SAPA] %s: param_time=%u\n",
+			__func__, sapa_param_time);
+		return 0;
+	}
+
+	return -EINVAL;
+}
+
+early_param("sapa", read_sapa_param);
+#endif
 
 /* Change NUL term back to "=", to make "param" the whole string. */
 static int __init repair_env_string(char *param, char *val,
@@ -467,8 +506,10 @@ static int __init do_early_param(char *param, char *val,
 		    (strcmp(param, "console") == 0 &&
 		     strcmp(p->str, "earlycon") == 0)
 		) {
+			memblock_memsize_set_name(p->str);
 			if (p->setup_func(val) != 0)
 				pr_warn("Malformed early option '%s'\n", param);
+			memblock_memsize_unset_name();
 		}
 	}
 	/* We accept everything at this stage. */
@@ -635,7 +676,7 @@ asmlinkage __visible void __init start_kernel(void)
 	sort_main_extable();
 	trap_init();
 	mm_init();
-
+        pr_notice("phx_klog_bootstage: %s\n", "KERNEL_MM_INIT_DONE");
 	ftrace_init();
 
 	/* trace_printk can be enabled here */
@@ -707,7 +748,7 @@ asmlinkage __visible void __init start_kernel(void)
 
 	early_boot_irqs_disabled = false;
 	local_irq_enable();
-
+        pr_notice("phx_klog_bootstage: %s\n", "KERNEL_LOCAL_IRQ_ENABLE");
 	kmem_cache_init_late();
 
 	/*
@@ -778,7 +819,7 @@ asmlinkage __visible void __init start_kernel(void)
 	cgroup_init();
 	taskstats_init_early();
 	delayacct_init();
-
+        pr_notice("phx_klog_bootstage: %s\n", "KERNEL_DELAYACCT_INIT_DONE");
 	poking_init();
 	check_bugs();
 
@@ -943,7 +984,7 @@ int __init_or_module do_one_initcall(initcall_t fn)
 		return -EPERM;
 
 	do_trace_initcall_start(fn);
-	ret = fn();
+	ret = sec_initcall_debug(fn);
 	do_trace_initcall_finish(fn, ret);
 
 	msgbuf[0] = 0;
@@ -1033,10 +1074,12 @@ static void __init do_basic_setup(void)
 {
 	cpuset_init_smp();
 	driver_init();
+        pr_notice("phx_klog_bootstage: %s\n", "KERNEL_DRIVER_INIT_DONE");
 	init_irq_proc();
 	do_ctors();
 	usermodehelper_enable();
 	do_initcalls();
+        pr_notice("phx_klog_bootstage: %s\n", "KERNEL_DO_INITCALLS_DONE");
 }
 
 static void __init do_pre_smp_initcalls(void)
@@ -1134,7 +1177,7 @@ static int __ref kernel_init(void *unused)
 	numa_default_policy();
 
 	rcu_end_inkernel_boot();
-
+        pr_notice("phx_klog_bootstage: %s\n", "KERNEL_INIT_DONE");
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
 	place_marker("M - DRIVER Kernel Boot Done");
 #endif
@@ -1204,7 +1247,7 @@ static noinline void __init kernel_init_freeable(void)
 	page_ext_init();
 
 	do_basic_setup();
-
+        pr_notice("phx_klog_bootstage: %s\n", "KERNEL_DO_BASIC_SETUP_DONE");
 	/* Open the /dev/console on the rootfs, this should never fail */
 	if (ksys_open((const char __user *) "/dev/console", O_RDWR, 0) < 0)
 		pr_err("Warning: unable to open an initial console.\n");
@@ -1235,4 +1278,7 @@ static noinline void __init kernel_init_freeable(void)
 	 */
 
 	integrity_load_keys();
+#ifdef CONFIG_SECURITY_DEFEX
+	defex_load_rules();
+#endif
 }

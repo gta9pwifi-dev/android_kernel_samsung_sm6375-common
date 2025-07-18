@@ -38,7 +38,11 @@
 
 #include "../base.h"
 #include "power.h"
-
+//+ P86801AA1-3866 , yexiaojun.wt, add, 20230706,  add wakeup reason
+#ifndef WT_FINAL_RELEASE
+#include "../../wt_sys/wt_pm_debug.h"
+#endif
+//- P86801AA1-3866 , yexiaojun.wt, add, 20230706,  add wakeup reason
 typedef int (*pm_callback_t)(struct device *);
 
 /*
@@ -640,7 +644,9 @@ static int device_resume_noirq(struct device *dev, pm_message_t state, bool asyn
 	const char *info;
 	bool skip_resume;
 	int error = 0;
-
+#ifndef WT_FINAL_RELEASE
+	ktime_t starttime = wt_pm_debug_dpm_calc_start();
+#endif
 	TRACE_DEVICE(dev);
 	TRACE_RESUME(0);
 
@@ -712,6 +718,9 @@ Skip:
 Out:
 	complete_all(&dev->power.completion);
 	TRACE_RESUME(error);
+#ifndef WT_FINAL_RELEASE
+	wt_pm_debug_dpm_calc_end(dev, starttime, "resume noirq");
+#endif
 	return error;
 }
 
@@ -849,7 +858,9 @@ static int device_resume_early(struct device *dev, pm_message_t state, bool asyn
 	pm_callback_t callback;
 	const char *info;
 	int error = 0;
-
+#ifndef WT_FINAL_RELEASE
+	ktime_t starttime = wt_pm_debug_dpm_calc_start();
+#endif
 	TRACE_DEVICE(dev);
 	TRACE_RESUME(0);
 
@@ -877,6 +888,9 @@ static int device_resume_early(struct device *dev, pm_message_t state, bool asyn
 
 	pm_runtime_enable(dev);
 	complete_all(&dev->power.completion);
+#ifndef WT_FINAL_RELEASE
+	wt_pm_debug_dpm_calc_end(dev, starttime, "resume early");
+#endif
 	return error;
 }
 
@@ -961,6 +975,9 @@ static int device_resume(struct device *dev, pm_message_t state, bool async)
 	pm_callback_t callback = NULL;
 	const char *info = NULL;
 	int error = 0;
+#ifndef WT_FINAL_RELEASE
+	ktime_t starttime = wt_pm_debug_dpm_calc_start();
+#endif
 	DECLARE_DPM_WATCHDOG_ON_STACK(wd);
 
 	TRACE_DEVICE(dev);
@@ -1037,7 +1054,9 @@ static int device_resume(struct device *dev, pm_message_t state, bool async)
 	complete_all(&dev->power.completion);
 
 	TRACE_RESUME(error);
-
+#ifndef WT_FINAL_RELEASE
+	wt_pm_debug_dpm_calc_end(dev, starttime, "resume");
+#endif
 	return error;
 }
 
@@ -1312,7 +1331,9 @@ static int __device_suspend_noirq(struct device *dev, pm_message_t state, bool a
 	const char *info;
 	bool no_subsys_cb = false;
 	int error = 0;
-
+#ifndef WT_FINAL_RELEASE
+	ktime_t starttime = wt_pm_debug_dpm_calc_start();
+#endif
 	TRACE_DEVICE(dev);
 	TRACE_SUSPEND(0);
 
@@ -1364,6 +1385,9 @@ Skip:
 Complete:
 	complete_all(&dev->power.completion);
 	TRACE_SUSPEND(error);
+#ifndef WT_FINAL_RELEASE
+	wt_pm_debug_dpm_calc_end(dev, starttime, "suspend noirq");
+#endif
 	return error;
 }
 
@@ -1515,7 +1539,9 @@ static int __device_suspend_late(struct device *dev, pm_message_t state, bool as
 	pm_callback_t callback;
 	const char *info;
 	int error = 0;
-
+#ifndef WT_FINAL_RELEASE
+	ktime_t starttime = wt_pm_debug_dpm_calc_start();
+#endif
 	TRACE_DEVICE(dev);
 	TRACE_SUSPEND(0);
 
@@ -1563,6 +1589,9 @@ Skip:
 Complete:
 	TRACE_SUSPEND(error);
 	complete_all(&dev->power.completion);
+#ifndef WT_FINAL_RELEASE
+	wt_pm_debug_dpm_calc_end(dev, starttime, "suspend late");
+#endif
 	return error;
 }
 
@@ -1720,6 +1749,9 @@ static int __device_suspend(struct device *dev, pm_message_t state, bool async)
 	pm_callback_t callback = NULL;
 	const char *info = NULL;
 	int error = 0;
+#ifndef WT_FINAL_RELEASE
+	ktime_t starttime = wt_pm_debug_dpm_calc_start();
+#endif
 	DECLARE_DPM_WATCHDOG_ON_STACK(wd);
 
 	TRACE_DEVICE(dev);
@@ -1837,6 +1869,9 @@ static int __device_suspend(struct device *dev, pm_message_t state, bool async)
 
 	complete_all(&dev->power.completion);
 	TRACE_SUSPEND(error);
+#ifndef WT_FINAL_RELEASE
+	wt_pm_debug_dpm_calc_end(dev, starttime, "suspend");
+#endif
 	return error;
 }
 
@@ -1926,7 +1961,9 @@ static int device_prepare(struct device *dev, pm_message_t state)
 {
 	int (*callback)(struct device *) = NULL;
 	int ret = 0;
-
+#ifndef WT_FINAL_RELEASE
+	ktime_t starttime = wt_pm_debug_dpm_calc_start();
+#endif
 	if (dev->power.syscore)
 		return 0;
 
@@ -1985,6 +2022,9 @@ unlock:
 		 dev->power.no_pm_callbacks) &&
 		!dev_pm_test_driver_flags(dev, DPM_FLAG_NEVER_SKIP);
 	spin_unlock_irq(&dev->power.lock);
+#ifndef WT_FINAL_RELEASE
+	wt_pm_debug_dpm_calc_end(dev, starttime, "prepare");
+#endif
 	return 0;
 }
 

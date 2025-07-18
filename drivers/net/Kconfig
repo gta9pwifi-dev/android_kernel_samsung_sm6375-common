@@ -529,3 +529,7 @@ config NET_FAILOVER
 	  datapath when the VF is unplugged.
 
 endif # NETDEVICES
+
+source "drivers/net/dropdump/Kconfig"
+source "drivers/net/drb/Kconfig"
+

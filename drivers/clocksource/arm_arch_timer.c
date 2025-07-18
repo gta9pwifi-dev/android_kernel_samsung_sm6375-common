@@ -80,7 +80,8 @@ static enum vdso_clock_mode vdso_default = VDSO_CLOCKMODE_NONE;
 #endif
 
 static cpumask_t evtstrm_available = CPU_MASK_NONE;
-static bool evtstrm_enable = IS_ENABLED(CONFIG_ARM_ARCH_TIMER_EVTSTREAM);
+//bug537103,gudi.wt,2020528,AFC modify for udelay
+static bool evtstrm_enable = 0;//IS_ENABLED(CONFIG_ARM_ARCH_TIMER_EVTSTREAM);
 
 static int __init early_evtstrm_cfg(char *buf)
 {

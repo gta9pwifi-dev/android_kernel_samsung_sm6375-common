@@ -132,6 +132,24 @@ static const char * const POWER_SUPPLY_SCOPE_TEXT[] = {
 	[POWER_SUPPLY_SCOPE_DEVICE]	= "Device",
 };
 
+//+P240307-04695, liwei19.wt, add, 20240319, New requirements for one ui 6.1 charging protection.
+#ifdef CONFIG_QGKI_BUILD
+static const char * const POWER_SUPPLY_BATT_FULL_CAPACITY_TEXT[] = {
+	[POWER_SUPPLY_CAPACITY_100]	= "100",
+	[POWER_SUPPLY_CAPACITY_80_HIGHSOC]	= "80 HIGHSOC",
+	[POWER_SUPPLY_CAPACITY_80_SLEEP]	= "80 SLEEP",
+	[POWER_SUPPLY_CAPACITY_80_OPTION]	= "80 OPTION",
+	[POWER_SUPPLY_CAPACITY_80_OFFCHARGING]	= "80",
+	[POWER_SUPPLY_CAPACITY_85_OPTION]	= "85 OPTION",
+	[POWER_SUPPLY_CAPACITY_85_OFFCHARGING]	= "85",
+	[POWER_SUPPLY_CAPACITY_90_OPTION]	= "90 OPTION",
+	[POWER_SUPPLY_CAPACITY_90_OFFCHARGING]	= "90",
+	[POWER_SUPPLY_CAPACITY_95_OPTION]	= "95 OPTION",
+	[POWER_SUPPLY_CAPACITY_95_OFFCHARGING]	= "95",
+};
+#endif
+//-P240307-04695, liwei19.wt, add, 20240319, New requirements for one ui 6.1 charging protection.
+
 static struct power_supply_attr power_supply_attrs[] = {
 	/* Properties of type `int' */
 	POWER_SUPPLY_ENUM_ATTR(STATUS),
@@ -214,6 +232,19 @@ static struct power_supply_attr power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(TX_ADAPTER),
 	POWER_SUPPLY_ATTR(SIGNAL_STRENGTH),
 	POWER_SUPPLY_ATTR(REVERSE_CHG_MODE),
+//+ReqP86801AA1-3595, liyiying.wt, add, 20230801, Configure SEC_BAT_CURRENT_EVENT_HV_DISABLE
+#ifdef CONFIG_QGKI_BUILD
+	POWER_SUPPLY_ATTR(STORE_MODE),
+	POWER_SUPPLY_ATTR(NEW_CHARGE_TYPE),
+	POWER_SUPPLY_ATTR(HV_CHARGER_STATUS),
+	POWER_SUPPLY_ATTR(BATT_SLATE_MODE),
+	POWER_SUPPLY_ATTR(BATT_CURRENT_EVENT),
+	POWER_SUPPLY_ATTR(BATT_CURRENT_UA_NOW),
+	POWER_SUPPLY_ENUM_ATTR(BATT_FULL_CAPACITY),
+	POWER_SUPPLY_ATTR(BATT_MISC_EVENT),
+	POWER_SUPPLY_ATTR(HV_DISABLE),
+#endif
+//-ReqP86801AA1-3595, liyiying.wt, add, 20230801, Configure SEC_BAT_CURRENT_EVENT_HV_DISABLE
 };
 
 static struct attribute *
@@ -290,6 +321,33 @@ static ssize_t power_supply_show_property(struct device *dev,
 		}
 	}
 
+#ifdef CONFIG_QGKI_BUILD
+	if (!strcmp(psy->desc->name, "otg")) {
+		ret = power_supply_get_property(psy, psp, &value);
+		if (ret < 0) {
+			if (ret == -ENODATA)
+				dev_dbg(dev, "driver has no data for `%s' property\n",
+					attr->attr.name);
+			else if (ret != -ENODEV && ret != -EAGAIN)
+				dev_err_ratelimited(dev,
+					"driver failed to report `%s' property: %zd\n",
+					attr->attr.name, ret);
+			return ret;
+		}
+		switch (psp) {
+			case POWER_SUPPLY_PROP_TYPE:
+				ret = sprintf(buf, "%s\n", value.intval ? "OTG" : "No OTG");
+				break;
+			case POWER_SUPPLY_PROP_ONLINE:
+				ret = sprintf(buf, "%s\n", value.intval ? "ON" : "OFF");
+				break;
+			default:
+				ret = 0;
+		}
+		return ret;
+	}
+#endif
+
 	if (ps_attr->text_values_len > 0 &&
 	    value.intval < ps_attr->text_values_len && value.intval >= 0) {
 		return sprintf(buf, "%s\n", ps_attr->text_values[value.intval]);
@@ -300,6 +358,9 @@ static ssize_t power_supply_show_property(struct device *dev,
 		ret = power_supply_show_usb_type(dev, psy->desc,
 						&value, buf);
 		break;
+#ifdef CONFIG_QGKI_BUILD
+	case POWER_SUPPLY_PROP_NEW_CHARGE_TYPE:
+#endif
 	case POWER_SUPPLY_PROP_MODEL_NAME ... POWER_SUPPLY_PROP_SERIAL_NUMBER:
 		ret = sprintf(buf, "%s\n", value.strval);
 		break;
@@ -318,6 +379,9 @@ static ssize_t power_supply_store_property(struct device *dev,
 	struct power_supply_attr *ps_attr = to_ps_attr(attr);
 	enum power_supply_property psp = dev_attr_psp(attr);
 	union power_supply_propval value;
+#ifdef CONFIG_QGKI_BUILD
+	int x = 0;
+#endif
 
 	ret = -EINVAL;
 	if (ps_attr->text_values_len > 0) {
@@ -332,11 +396,25 @@ static ssize_t power_supply_store_property(struct device *dev,
 	if (ret < 0) {
 		long long_val;
 
+#ifdef CONFIG_QGKI_BUILD
+		if (psp == POWER_SUPPLY_PROP_STORE_MODE) {
+			if (sscanf(buf, "%10d\n", &x) == 1) {
+				pr_err("#### power_supply_store_property x(%d)\n", x );
+				ret = x;
+			}
+		} else {
+			ret = kstrtol(buf, 10, &long_val);
+			if (ret < 0)
+				return ret;
+			ret = long_val;
+		}
+#else
 		ret = kstrtol(buf, 10, &long_val);
 		if (ret < 0)
 			return ret;
 
 		ret = long_val;
+#endif
 	}
 
 	value.intval = ret;

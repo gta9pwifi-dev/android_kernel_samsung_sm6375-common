@@ -302,6 +302,19 @@ enum constraint {
 	QOS_MAX,
 };
 
+/*unique number*/
+#define UFS_UN_20_DIGITS 20
+#define UFS_UN_MAX_DIGITS 21 //current max digit + 1
+
+#define SERIAL_NUM_SIZE 7
+
+struct ufs_vendor_dev_info {
+	char unique_number[UFS_UN_MAX_DIGITS];
+	u8 lifetime;
+	unsigned int lc_info;
+	struct ufs_hba *hba;
+};
+
 struct ufs_qcom_host {
 	/*
 	 * Set this capability if host controller supports the QUniPro mode
@@ -377,6 +390,7 @@ struct ufs_qcom_host {
 	struct ufs_qcom_qos_req *ufs_qos;
 	bool bypass_g4_cfgready;
 	bool is_dt_pm_level_read;
+	u64 transferred_bytes;
 };
 
 static inline u32

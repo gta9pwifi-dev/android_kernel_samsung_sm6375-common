@@ -110,6 +110,9 @@ source "drivers/usb/image/Kconfig"
 source "drivers/usb/usbip/Kconfig"
 
 endif
+#bugP86801AA1-3643 houdujing.wt,add.20230613,add usb node for ultra power mode
+
+source "drivers/usb/notify/Kconfig"
 
 source "drivers/usb/cdns3/Kconfig"
 

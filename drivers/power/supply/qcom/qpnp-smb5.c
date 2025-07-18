@@ -1195,6 +1195,10 @@ static enum power_supply_property smb5_batt_props[] = {
 	POWER_SUPPLY_PROP_STATUS,
 	POWER_SUPPLY_PROP_HEALTH,
 	POWER_SUPPLY_PROP_PRESENT,
+	//PLM230714-05698,23/07/25,gudi.wt,no iocn in power off charging
+#ifdef CONFIG_QGKI_BUILD
+	POWER_SUPPLY_PROP_ONLINE,
+#endif //CONFIG_QGKI_BUILD
 	POWER_SUPPLY_PROP_CHARGE_TYPE,
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
@@ -1232,6 +1236,11 @@ static int smb5_batt_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_PRESENT:
 		rc = smblib_get_prop_batt_present(chg, pval);
 		break;
+	//PLM230714-05698,23/07/25,gudi.wt,no iocn in power off charging
+#ifdef CONFIG_QGKI_BUILD
+	case POWER_SUPPLY_PROP_ONLINE:
+		break;
+#endif //CONFIG_QGKI_BUILD
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
 		rc = smblib_get_prop_input_suspend(chg, pval);
 		break;

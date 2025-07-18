@@ -1123,7 +1123,14 @@ static inline bool ufshcd_is_auto_hibern8_enabled(struct ufs_hba *hba)
 
 static inline bool ufshcd_is_wb_allowed(struct ufs_hba *hba)
 {
+/*+ P86801AA1-4039 houdujing.wt 20230517 close wb in factory version*/
+#ifdef WT_COMPILE_FACTORY_VERSION
+	return false;
+#else
 	return hba->caps & UFSHCD_CAP_WB_EN;
+#endif
+/*- P86801AA1-4039 houdujing.wt 20230517 close wb in factory version*/
+
 }
 
 #define ufshcd_writel(hba, val, reg)	\

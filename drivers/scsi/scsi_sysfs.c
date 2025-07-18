@@ -26,6 +26,24 @@
 #include "scsi_priv.h"
 #include "scsi_logging.h"
 
+//+ bugP86801AA1-3497 houdujing.wt add 20230503 add flash name
+#include <linux/mm.h>
+#include <linux/genhd.h>
+
+#define SD_NUM  6
+/* get ddr size  */
+#define WT_GET_DDR_SIZE_ZERO             0
+#define WT_GET_DDR_SIZE_4GB              4
+#define WT_GET_DDR_SIZE_6GB              6
+#define WT_GET_DDR_SIZE_8GB              8
+/* get ufs size */
+#define WT_GET_UFS_SIZE_ZERO             0
+#define WT_GET_UFS_SIZE_64GB             64
+#define WT_GET_UFS_SIZE_128GB            128
+#define WT_GET_UFS_SIZE_256GB            256
+
+struct gendisk *ufs_disk[SD_NUM];
+//- bugP86801AA1-3497 houdujing.wt add 20230503 add flash name
 static struct device_type scsi_dev_type;
 
 static const struct {
@@ -377,6 +395,103 @@ shost_rd_attr(unchecked_isa_dma, "%d\n");
 shost_rd_attr(prot_capabilities, "%u\n");
 shost_rd_attr(prot_guard_type, "%hd\n");
 shost_rd_attr2(proc_name, hostt->proc_name, "%s\n");
+
+//+ bugP86801AA1-3497 houdujing.wt add 20230503 add flash name
+static int calc_mem_size(void)
+{
+  int temp_size;
+  temp_size = (int)totalram_pages()/1024; //page size 4K
+
+  if ((temp_size > 3*256) && (temp_size <= 4*256))
+  	return WT_GET_DDR_SIZE_4GB;
+  else if ((temp_size > 4*256) && (temp_size <= 6*256))
+  	return WT_GET_DDR_SIZE_6GB;
+  else if ((temp_size > 6*256) && (temp_size <= 8*256))
+  	return WT_GET_DDR_SIZE_8GB;
+  else
+    return WT_GET_DDR_SIZE_ZERO;
+}
+
+static int calc_ufs_size(unsigned long long size)
+{
+  int temp_size;
+  temp_size = (int)size/2/1024/1024; //sector size 512B
+
+  if ((temp_size > 32) && (temp_size <= 64))
+  	return WT_GET_UFS_SIZE_64GB;
+  else if ((temp_size > 64) && (temp_size <= 128))
+  	return WT_GET_UFS_SIZE_128GB;
+  else if ((temp_size >128) && (temp_size <= 256))
+	return WT_GET_UFS_SIZE_256GB;
+  else
+    return WT_GET_UFS_SIZE_ZERO;
+}
+
+static ssize_t
+show_flash_name(struct device *dev, struct device_attribute *attr, char *buf)
+{
+  struct scsi_device *sdev;
+  struct hd_struct *p = NULL;
+  struct gendisk **gd_t = ufs_disk;
+  unsigned long long ufs_size = 0;
+  unsigned long long current_ufs_size = 0;
+  int ret = 0;
+  char vendor_name[32] = {0};
+  char model_name[32] = {0};
+
+  sdev = to_scsi_device(dev);
+
+  for(; *gd_t!=NULL; gd_t++)
+  {
+    p = &((*gd_t)->part0);
+    current_ufs_size = (unsigned long long)part_nr_sects_read(p);
+	ufs_size += current_ufs_size;
+  }
+  printk("%s: wt ufs sects num is <%llu>\n", __func__, ufs_size);
+  ret = sscanf(sdev->vendor, "%8s", vendor_name);
+  if (ret != 1)
+  	return -EINVAL;
+
+  ret = sscanf(sdev->model, "%16s", model_name);
+  if (ret != 1)
+  	return -EINVAL;
+
+  return sprintf(buf, "%s_%s_%dGB_%dGB\n",vendor_name, model_name,
+  calc_mem_size(), calc_ufs_size(ufs_size));
+}
+static DEVICE_ATTR(flash_name, S_IRUGO, show_flash_name, NULL);
+//- bugP86801AA1-3497 houdujing.wt add 20230503 add flash name
+
+//+ bugP86801AA1-3526 houdujing.wt add 20230503 add ROM & RAM size
+static ssize_t
+show_ddr_size(struct device *dev, struct device_attribute *attr, char *buf)
+{
+  return sprintf(buf, "%dGB\n", calc_mem_size());
+}
+static DEVICE_ATTR(ddr_size, S_IRUGO, show_ddr_size, NULL);
+
+static ssize_t
+show_memory_size(struct device *dev, struct device_attribute *attr, char *buf)
+{
+  struct scsi_device *sdev;
+  struct hd_struct *p = NULL;
+  struct gendisk **gd_t = ufs_disk;
+  unsigned long long ufs_size = 0;
+  unsigned long long current_ufs_size = 0;
+
+  sdev = to_scsi_device(dev);
+
+  for(; *gd_t!=NULL; gd_t++)
+  {
+    p = &((*gd_t)->part0);
+    current_ufs_size = (unsigned long long)part_nr_sects_read(p);
+	ufs_size += current_ufs_size;
+  }
+
+  return sprintf(buf, "%dGB\n", calc_ufs_size(ufs_size));
+}
+static DEVICE_ATTR(memory_size, S_IRUGO, show_memory_size, NULL);
+//+ bugP86801AA1-3526 houdujing.wt add 20230503 add ROM & RAM size
 
 static ssize_t
 show_host_busy(struct device *dev, struct device_attribute *attr, char *buf)
@@ -1269,6 +1384,9 @@ static struct attribute *scsi_sdev_attrs[] = {
 	&dev_attr_preferred_path.attr,
 #endif
 	&dev_attr_queue_ramp_up_period.attr,
+	&dev_attr_flash_name.attr,/*bugP86801AA1-3497 houdujing.wt add 20230503 add flash name*/
+	&dev_attr_ddr_size.attr,/*bugP86801AA1-3526 houdujing.wt add 20230503 add RAM size*/
+	&dev_attr_memory_size.attr,/*bugP86801AA1-3526 houdujing.wt add 20230503 add ROM size*/
 	REF_EVT(media_change),
 	REF_EVT(inquiry_change_reported),
 	REF_EVT(capacity_change_reported),

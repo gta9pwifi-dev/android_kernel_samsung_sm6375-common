@@ -31,6 +31,8 @@
 #include "base.h"
 #include "power/power.h"
 
+#include <linux/samsung/debug/sec_kboot_stat.h>
+
 /*
  * Deferred Probe infrastructure.
  *
@@ -749,7 +751,7 @@ int driver_probe_device(struct device_driver *drv, struct device *dev)
 	if (initcall_debug)
 		ret = really_probe_debug(dev, drv);
 	else
-		ret = really_probe(dev, drv);
+		ret = sec_probe_debug(really_probe, dev, drv);
 	pm_request_idle(dev);
 
 	if (dev->parent)

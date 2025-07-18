@@ -21,6 +21,7 @@
 #include <linux/slab.h>
 
 #include <dt-bindings/iio/qcom,spmi-vadc.h>
+#include <dt-bindings/iio/qcom,spmi-adc7-pmk8350.h>
 #include "qcom-vadc-common.h"
 
 #define ADC5_USR_REVISION1			0x0
@@ -961,6 +962,10 @@ static const struct adc5_channels adc5_chans_pmic[ADC5_MAX_CHANNEL] = {
 					SCALE_HW_CALIB_DEFAULT)
 	[ADC5_MID_CHG_DIV6]	= ADC5_CHAN_VOLT("chg_mid_chg", 3,
 					SCALE_HW_CALIB_DEFAULT)
+	/* +P86801AA1-1797,xubuchao1.wt,ADD,20230515, add battery id detect adc */
+	[ADC5_GPIO3_30K_PU]	= ADC5_CHAN_VOLT("batt_id", 0,
+					SCALE_HW_CALIB_DEFAULT)
+	/* -P86801AA1-1797,xubuchao1.wt,ADD,20230515, add battery id detect adc */
 	[ADC5_XO_THERM_100K_PU]	= ADC5_CHAN_TEMP("xo_therm", 0,
 					SCALE_HW_CALIB_XOTHERM)
 	[ADC5_BAT_THERM_100K_PU]	= ADC5_CHAN_TEMP("bat_therm_100k_pu", 0,
@@ -969,8 +974,6 @@ static const struct adc5_channels adc5_chans_pmic[ADC5_MAX_CHANNEL] = {
 					SCALE_HW_CALIB_BATT_THERM_30K)
 	[ADC5_BAT_THERM_400K_PU]	= ADC5_CHAN_TEMP("bat_therm_400k_pu", 0,
 					SCALE_HW_CALIB_BATT_THERM_400K)
-	[ADC5_BAT_ID_100K_PU]	= ADC5_CHAN_TEMP("bat_id", 0,
-					SCALE_HW_CALIB_DEFAULT)
 	[ADC5_AMUX_THM1_100K_PU] = ADC5_CHAN_TEMP("amux_thm1_100k_pu", 0,
 					SCALE_HW_CALIB_THERM_100K_PULLUP)
 	[ADC5_AMUX_THM2_100K_PU] = ADC5_CHAN_TEMP("amux_thm2_100k_pu", 0,
@@ -1040,6 +1043,9 @@ static const struct adc5_channels adc7_chans_pmic[ADC5_MAX_CHANNEL] = {
 					SCALE_HW_CALIB_THERM_100K_PU_PM7)
 	[ADC7_V_I_BAT_THERM]	= ADC5_CHAN_TEMP("bat_therm_calib_100k_pu",
 					0, SCALE_HW_CALIB_PM5_GEN3_BATT_THERM_100K)
+	[PMK8350_ADC7_AMUX_THM4_100K_PU]	= ADC5_CHAN_TEMP("vbus_dect", 0,
+						SCALE_HW_CALIB_DEFAULT)
+
 };
 
 static const struct adc5_channels adc5_chans_rev2[ADC5_MAX_CHANNEL] = {

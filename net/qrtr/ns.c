@@ -104,7 +104,10 @@ unsigned int qrtr_get_service_id(unsigned int node_id, unsigned int port_id)
 	struct qrtr_node *node;
 	unsigned long index;
 
-	node = node_get(node_id);
+	/*P86801AA1-6363, zhaoshuaiqi01, 20230522, modify, In qrtr_get_service_id, use xa_load instead of node_get to check
+	if the node exists or not. Calling node_get from interrupt context can cause potential deadlock since it
+	calls into xa_store to allocate the node if it does not exist.*/
+	node = xa_load(&nodes, node_id);
 	if (!node)
 		return 0;
 

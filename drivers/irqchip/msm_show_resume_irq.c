@@ -6,8 +6,8 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
-
-int msm_show_resume_irq_mask;
+//+P86801AA1-3866, yexiaojun.wt, modify, 20230519, add kernel debug log
+int msm_show_resume_irq_mask = 1;
 
 module_param_named(
 	debug_mask, msm_show_resume_irq_mask, int, 0664);

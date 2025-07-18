@@ -56,7 +56,7 @@ int sysctl_panic_on_oom =
 IS_ENABLED(CONFIG_DEBUG_PANIC_ON_OOM) ? 2 : 0;
 int sysctl_oom_kill_allocating_task;
 int sysctl_oom_dump_tasks = 1;
-int sysctl_reap_mem_on_sigkill = 1;
+int sysctl_reap_mem_on_sigkill;
 
 #ifdef CONFIG_PRIORITIZE_OOM_TASKS
 static unsigned long panic_on_oom_timeout;
@@ -446,10 +446,18 @@ static int dump_task(struct task_struct *p, void *arg)
  * State information includes task's pid, uid, tgid, vm size, rss,
  * pgtables_bytes, swapents, oom_score_adj value, and name.
  */
-static void dump_tasks(struct oom_control *oc)
+void dump_tasks(struct oom_control *oc)
 {
+	struct oom_control oc_dummy = {
+		.nodemask = NULL,
+		.memcg = NULL,
+	};
+
 	pr_info("Tasks state (memory values in pages):\n");
 	pr_info("[  pid  ]   uid  tgid total_vm      rss pgtables_bytes swapents oom_score_adj name\n");
+
+	if (!oc)
+		oc = &oc_dummy;
 
 	if (is_memcg_oom(oc))
 		mem_cgroup_scan_tasks(oc->memcg, dump_task, oc);

@@ -524,6 +524,11 @@ config HISI_HIKEY_USB
 	help
 	  If you say yes here you get support for usb functionality of HiSilicon Hikey Platform.
 
+config HARDWARE_INFO
+	tristate "HARDWARE_INFO driver"
+	help
+	  If you say yes here you get support for hardware_info
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"

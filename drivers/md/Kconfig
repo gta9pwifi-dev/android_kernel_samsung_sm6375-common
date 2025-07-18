@@ -631,4 +631,12 @@ config DM_BOW
 
 	  If unsure, say N.
 
+config WT_DM_VERITY_CHECK
+	tristate "WT feature that system should panic when FEC recovery fails."
+	---help---
+	  The WT_SECUREBOOT_FUSE_STATE config is a method that check dm-verity corrupt issue.
+	  If some data has corrupt of the machine, we will trigger panic and print corrupt data.
+
+	  If unsure, say N.
+
 endif # MD
