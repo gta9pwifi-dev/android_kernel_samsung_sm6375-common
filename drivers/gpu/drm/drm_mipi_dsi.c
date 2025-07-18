@@ -1056,7 +1056,7 @@ int mipi_dsi_dcs_set_display_brightness(struct mipi_dsi_device *dsi,
 {
 	u8 payload[2] = { brightness & 0xff, brightness >> 8 };
 	ssize_t err;
-
+	pr_err("WT_LCD,mipi_dsi_dcs_set_display_brightness[cal], brightness:0x%x\n",(payload[0]<<8)|payload[1]);//+P86801AA1,liuyongliang.wt,add,2023.06.16, add debug log
 	err = mipi_dsi_dcs_write(dsi, MIPI_DCS_SET_DISPLAY_BRIGHTNESS,
 				 payload, sizeof(payload));
 	if (err < 0)

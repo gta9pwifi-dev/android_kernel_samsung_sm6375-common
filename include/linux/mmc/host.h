@@ -602,6 +602,11 @@ struct mmc_host {
 #if defined(CONFIG_SDC_QTI)
 	atomic_t active_reqs;
 #endif
+
+#if IS_ENABLED(CONFIG_SEC_MMC_FEATURE)
+	bool			failed_init;
+#endif
+
 	unsigned long		private[0] ____cacheline_aligned;
 };
 

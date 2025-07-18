@@ -134,6 +134,11 @@ static struct kmem_cache *sd_cdb_cache;
 static mempool_t *sd_cdb_pool;
 static mempool_t *sd_page_pool;
 
+//+ bugP86801AA1-3497 houdujing.wt add 20230503 add flash name
+#define SD_NUM 6
+extern struct gendisk *ufs_disk[];
+//- bugP86801AA1-3497 houdujing.wt add 20230503 add flash name
+
 static const char *sd_cache_types[] = {
 	"write through", "none", "write back",
 	"write back, no read (daft)"
@@ -3111,6 +3116,7 @@ static int sd_revalidate_disk(struct gendisk *disk)
 	struct scsi_disk *sdkp = scsi_disk(disk);
 	struct scsi_device *sdp = sdkp->device;
 	struct request_queue *q = sdkp->disk->queue;
+	struct scsi_host_template *sht = sdp->host->hostt;
 	sector_t old_capacity = sdkp->capacity;
 	unsigned char *buffer;
 	unsigned int dev_max, rw_max;
@@ -3187,6 +3193,10 @@ static int sd_revalidate_disk(struct gendisk *disk)
 		rw_max = min_not_zero(logical_to_sectors(sdp, dev_max),
 				      (sector_t)BLK_DEF_MAX_SECTORS);
 	}
+
+	/* Set rw_max using hw_max when device is ufs */
+	if (!strncmp(sht->name, "ufshcd", 6))
+		rw_max = queue_max_hw_sectors(q);
 
 	/* Do not exceed controller limit */
 	rw_max = min(rw_max, queue_max_hw_sectors(q));
@@ -3301,6 +3311,7 @@ static int sd_probe(struct device *dev)
 	struct gendisk *gd;
 	int index;
 	int error;
+	static int num = 0; /*bugP86801AA1-3497 houdujing.wt add 20230503 add flash name*/
 
 	scsi_autopm_get_device(sdp);
 	error = -ENODEV;
@@ -3337,6 +3348,12 @@ static int sd_probe(struct device *dev)
 		sdev_printk(KERN_WARNING, sdp, "SCSI disk (sd) name length exceeded.\n");
 		goto out_free_index;
 	}
+
+//+ bugP86801AA1-3497 houdujing.wt add 20230503 add flash name
+	printk("kook---sd_enter_1\n");
+	if(num < SD_NUM)
+		ufs_disk[num++] = gd;
+//- bugP86801AA1-3497 houdujing.wt add 20230503 add flash name
 
 	sdkp->device = sdp;
 	sdkp->driver = &sd_template;

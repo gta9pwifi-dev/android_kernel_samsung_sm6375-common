@@ -182,9 +182,11 @@ ld_flags       = $(KBUILD_LDFLAGS) $(ldflags-y) $(LDFLAGS_$(@F))
 
 DTC_INCLUDE    := $(srctree)/scripts/dtc/include-prefixes
 
+#+ P86801EA1-1206 gudi1.wt,add.20231007,modify quiet thermal
 dtc_cpp_flags  = -Wp,-MD,$(depfile).pre.tmp -nostdinc                    \
 		 $(addprefix -I,$(DTC_INCLUDE))                          \
-		 -undef -D__DTS__
+		 -undef -D__DTS__ $(WT_FEATURE_ENABLE_DTC) $(CHARGER_AMERICA)
+#- P86801EA1-1206 gudi1.wt,add.20231007,modify quiet thermal
 
 # Useful for describing the dependency of composite objects
 # Usage:
@@ -295,6 +297,7 @@ cmd_dtc = mkdir -p $(dir ${dtc-tmp}) ; \
 	$(DTC) -O $(2) -o $@ -b 0 \
 		$(addprefix -i,$(dir $<) $(DTC_INCLUDE)) $(3) $(DTC_FLAGS) \
 		-d $(depfile).dtc.tmp $(dtc-tmp) ; \
+	$(DTC) -O dts -I dtb -o $@.reverse.dts $@ ; \
 	cat $(depfile).pre.tmp $(depfile).dtc.tmp > $(depfile)
 
 $(obj)/%.dtb: $(src)/%.dts $(DTC) FORCE

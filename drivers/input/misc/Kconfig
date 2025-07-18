@@ -914,4 +914,55 @@ config INPUT_STPMIC1_ONKEY
 	  To compile this driver as a module, choose M here: the
 	  module will be called stpmic1_onkey.
 
+#+P86801AA1, ludandan2.wt, add, 2023.05.06, sensor bringup
+config INPUT_HX9036
+	tristate "HX9036_SAR_sensor"
+	depends on I2C
+	default n
+	help
+	  Say Y to enable the SAR detection application, if N here not to use the
+          this SAR sensor
+
+config INPUT_HX9036_NA
+	tristate "HX9036_SAR_sensor"
+	depends on I2C
+	default n
+	help
+	  Say Y to enable the SAR detection application, if N here not to use the
+          this SAR sensor
+
+config INPUT_HX9023S
+	tristate "HX9023S_SAR_sensor"
+	depends on I2C
+	default n
+	help
+	  Say Y to enable the SAR detection application, if N here not to use the
+          this SAR sensor
+
+config INPUT_SX937X
+    tristate "SX937X_SAR_sensor"
+    depends on I2C
+    default n
+    help
+      Say Y to enable the SAR detection application, if N here not to use the
+          this SAR sensor
+
+config INPUT_SX937X_NA
+    tristate "SX937X_NA_SAR_sensor"
+    depends on I2C
+    default n
+    help
+      Say Y to enable the SAR detection application, if N here not to use the
+          this SAR sensor
+
+config INPUT_SX932X
+   tristate "SX932X_SAR_sensor"
+   depends on I2C
+   default n
+   help
+     Say Y to enable the SAR detection application, if N here not to use the
+         this SAR sensor
+
+#-P86801AA1, ludandan2.wt, add, 2023.05.06, sensor bringup
 endif
+

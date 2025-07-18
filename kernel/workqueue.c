@@ -366,6 +366,9 @@ static void workqueue_sysfs_unregister(struct workqueue_struct *wq);
 #define CREATE_TRACE_POINTS
 #include <trace/events/workqueue.h>
 
+EXPORT_TRACEPOINT_SYMBOL_GPL(workqueue_execute_start);
+EXPORT_TRACEPOINT_SYMBOL_GPL(workqueue_execute_end);
+
 #define assert_rcu_or_pool_mutex()					\
 	RCU_LOCKDEP_WARN(!rcu_read_lock_held() &&			\
 			 !lockdep_is_held(&wq_pool_mutex),		\

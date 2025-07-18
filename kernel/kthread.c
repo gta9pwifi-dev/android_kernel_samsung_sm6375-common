@@ -493,6 +493,11 @@ struct task_struct *kthread_create_on_cpu(int (*threadfn)(void *data),
 	to_kthread(p)->cpu = cpu;
 	return p;
 }
+/*+ P86801AA1-13544, gudi1@wt, add 20231017, usb if*/
+#ifdef CONFIG_QGKI_BUILD
+EXPORT_SYMBOL(kthread_create_on_cpu);
+#endif
+/*- P86801AA1-13544, gudi1@wt, add 20231017, usb if*/
 
 void kthread_set_per_cpu(struct task_struct *k, int cpu)
 {

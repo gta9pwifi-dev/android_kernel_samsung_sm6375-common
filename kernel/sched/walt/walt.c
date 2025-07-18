@@ -3860,3 +3860,14 @@ unlock:
 	mutex_unlock(&mutex);
 	return ret;
 }
+
+#if IS_ENABLED(CONFIG_SEC_QC_SUMMARY)
+#include <linux/samsung/debug/qcom/sec_qc_summary.h>
+
+void sec_qc_summary_set_sched_walt_info(struct sec_qc_summary_data_apss *apss)
+{
+	apss->aplpm.num_clusters = num_sched_clusters;
+	apss->aplpm.p_cluster = virt_to_phys(sched_cluster);
+}
+EXPORT_SYMBOL(sec_qc_summary_set_sched_walt_info);
+#endif

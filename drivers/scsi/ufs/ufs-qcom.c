@@ -26,6 +26,8 @@
 #include "ufs_quirks.h"
 #include "ufshcd-crypto-qti.h"
 
+#include <linux/sec_class.h>
+
 #define UFS_QCOM_DEFAULT_DBG_PRINT_EN	\
 	(UFS_QCOM_DBG_PRINT_REGS_EN | UFS_QCOM_DBG_PRINT_TEST_BUS_EN)
 
@@ -40,6 +42,14 @@
 
 #define	ANDROID_BOOT_DEV_MAX	30
 static char android_boot_dev[ANDROID_BOOT_DEV_MAX];
+
+/* UFSHCD states */
+enum {
+	UFSHCD_STATE_RESET,
+	UFSHCD_STATE_ERROR,
+	UFSHCD_STATE_OPERATIONAL,
+	UFSHCD_STATE_EH_SCHEDULED,
+};
 
 enum {
 	TSTBUS_UAWM,
@@ -86,6 +96,12 @@ static int ufs_qcom_update_qos_constraints(struct qos_cpu_group *qcg,
 					   enum constraint type);
 static int ufs_qcom_unvote_qos_all(struct ufs_hba *hba);
 static void ufs_qcom_parse_g4_workaround_flag(struct ufs_qcom_host *host);
+
+/* sec special features */
+static struct ufs_vendor_dev_info ufs_vdi;
+static void ufs_set_sec_unique_number(struct ufs_hba *hba, u8 *desc_buf);
+static void ufs_get_health_desc(struct ufs_hba *hba);
+
 static int ufs_qcom_get_pwr_dev_param(struct ufs_qcom_dev_params *qcom_param,
 				      struct ufs_pa_layer_attr *dev_max,
 				      struct ufs_pa_layer_attr *agreed_pwr)
@@ -1841,6 +1857,36 @@ static void ufs_qcom_override_pa_h8time(struct ufs_hba *hba)
 }
 #endif
 
+static void ufs_set_sec_features(struct ufs_hba *hba)
+{
+	int buff_len;
+	u8 *desc_buf = NULL;
+	int err;
+
+	ufs_vdi.hba = hba;
+
+	/* read device desc */
+	buff_len = hba->desc_size.dev_desc;
+	desc_buf = kmalloc(buff_len, GFP_KERNEL);
+	if (!desc_buf)
+		return;
+
+	err = ufshcd_query_descriptor_retry(hba, UPIU_QUERY_OPCODE_READ_DESC,
+			QUERY_DESC_IDN_DEVICE, 0, 0,
+			desc_buf, &buff_len);
+	if (err) {
+		dev_err(hba->dev, "%s: Failed reading device descriptor. err %d",
+				__func__, err);
+		goto out;
+	}
+
+	ufs_set_sec_unique_number(hba, desc_buf); 
+	ufs_get_health_desc(hba); 
+
+out:
+	kfree(desc_buf);
+}
+
 static int ufs_qcom_apply_dev_quirks(struct ufs_hba *hba)
 {
 	unsigned long flags;
@@ -1871,6 +1917,12 @@ static int ufs_qcom_apply_dev_quirks(struct ufs_hba *hba)
 	if (hba->dev_quirks & UFS_DEVICE_QUIRK_PA_HIBER8TIME)
 		ufs_qcom_override_pa_h8time(hba);
 #endif
+
+	/* check only at the first init */
+	if (!(hba->eh_flags || hba->pm_op_in_progress))
+		/* sec special features */
+		ufs_set_sec_features(hba);
+
 	return err;
 }
 
@@ -2527,8 +2579,19 @@ static int ufs_qcom_update_qos_constraints(struct qos_cpu_group *qcg,
 static void ufs_qcom_qos(struct ufs_hba *hba, int tag, bool is_scsi_cmd)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	struct ufshcd_lrb *lrbp = &hba->lrb[tag];
 	struct qos_cpu_group *qcg;
+	unsigned char *cmnd;
 	int cpu;
+	
+	if (lrbp && lrbp->cmd) {
+		cmnd = lrbp->cmd->cmnd;
+
+		/* 0x28 : READ(10), 0x2A : WRITE(10) */
+		/* cmnd[7] & cmnd[8] is the length of the data, 4KB unit */
+		if (cmnd[0] == 0x28 || cmnd[0] == 0x2A)
+			host->transferred_bytes += (u64)((cmnd[7] << 8) | cmnd[8]) * 4096;
+	}
 
 	if (!host->ufs_qos)
 		return;
@@ -3687,6 +3750,202 @@ static const struct attribute_group ufs_qcom_sysfs_group = {
 	.name = "qcom",
 	.attrs = ufs_qcom_sysfs_attrs,
 };
+/* sec special features */
+static void ufs_set_sec_unique_number(struct ufs_hba *hba, u8 *desc_buf)
+{
+	u8 manid;
+	u8 serial_num_index;
+	u8 snum_buf[UFS_UN_MAX_DIGITS];
+	int buff_len;
+	u8 *str_desc_buf = NULL;
+	int err;
+
+	/* read string desc */
+	buff_len = QUERY_DESC_MAX_SIZE;
+	str_desc_buf = kzalloc(buff_len, GFP_KERNEL);
+	if (!str_desc_buf)
+		goto out;
+
+	serial_num_index = desc_buf[DEVICE_DESC_PARAM_SN];
+
+	/* spec is unicode but sec uses hex data */
+	err = ufshcd_query_descriptor_retry(hba, UPIU_QUERY_OPCODE_READ_DESC,
+			QUERY_DESC_IDN_STRING, serial_num_index, 0,
+			str_desc_buf, &buff_len);
+	if (err) {
+		dev_err(hba->dev, "%s: Failed reading string descriptor. err %d",
+				__func__, err);
+		goto out;
+	}
+
+	/* setup unique_number */
+	manid = desc_buf[DEVICE_DESC_PARAM_MANF_ID + 1];
+	memset(snum_buf, 0, sizeof(snum_buf));
+	memcpy(snum_buf, str_desc_buf + QUERY_DESC_HDR_SIZE, SERIAL_NUM_SIZE);
+	memset(ufs_vdi.unique_number, 0, sizeof(ufs_vdi.unique_number));
+
+	sprintf(ufs_vdi.unique_number, "%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X",
+			manid,
+			desc_buf[DEVICE_DESC_PARAM_MANF_DATE], desc_buf[DEVICE_DESC_PARAM_MANF_DATE + 1],
+			snum_buf[0], snum_buf[1], snum_buf[2], snum_buf[3], snum_buf[4], snum_buf[5], snum_buf[6]);
+
+	/* Null terminate the unique number string */
+	ufs_vdi.unique_number[UFS_UN_20_DIGITS] = '\0';
+
+	dev_dbg(hba->dev, "%s: ufs un : %s\n", __func__, ufs_vdi.unique_number);
+out:
+	if (str_desc_buf)
+		kfree(str_desc_buf);
+}
+
+static void ufs_get_health_desc(struct ufs_hba *hba)
+{
+	int buff_len;
+	u8 *desc_buf = NULL;
+	int err;
+
+	buff_len = hba->desc_size.hlth_desc;
+	desc_buf = kmalloc(buff_len, GFP_KERNEL);
+	if (!desc_buf)
+		return;
+
+	err = ufshcd_query_descriptor_retry(hba, UPIU_QUERY_OPCODE_READ_DESC,
+			QUERY_DESC_IDN_HEALTH, 0, 0,
+			desc_buf, &buff_len);
+	if (err) {
+		dev_err(hba->dev, "%s: Failed reading health descriptor. err %d",
+				__func__, err);
+		goto out;
+	}
+
+	/* getting Life Time at Device Health DESC*/
+	ufs_vdi.lifetime = desc_buf[HEALTH_DESC_PARAM_LIFE_TIME_EST_A];
+
+	dev_info(hba->dev, "LT: 0x%02x\n", (desc_buf[3] << 4) | desc_buf[4]);
+out:
+	if (desc_buf)
+		kfree(desc_buf);
+}
+
+#ifndef MODULE
+static char un_buf[UFS_UN_MAX_DIGITS];
+
+static int __init un_boot_state_param(char *line)
+{
+	if (strlen(line) == UFS_UN_20_DIGITS)
+		strncpy(un_buf, line, UFS_UN_20_DIGITS);
+	return 1;
+}
+__setup("androidboot.un=", un_boot_state_param);
+#endif
+
+static ssize_t ufs_unique_number_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+#ifndef MODULE
+	if (strncmp(un_buf, ufs_vdi.unique_number, UFS_UN_20_DIGITS) != 0) {
+		pr_info("%s: UFS UN mismatch\n", __func__);
+		BUG_ON(1);
+	}
+#endif
+	return snprintf(buf, PAGE_SIZE, "%s\n", ufs_vdi.unique_number);
+}
+static DEVICE_ATTR(un, 0440, ufs_unique_number_show, NULL);
+
+static ssize_t ufs_lt_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+
+	if (!hba) {
+		dev_err(dev, "skipping ufs lt read\n");
+		ufs_vdi.lifetime = 0;
+	} else if (hba->ufshcd_state == UFSHCD_STATE_OPERATIONAL) {
+		pm_runtime_get_sync(hba->dev);
+		ufs_get_health_desc(hba);
+		pm_runtime_put(hba->dev);
+	} else {
+		/* return previous LT value if not operational */
+		dev_info(hba->dev, "ufshcd_state : %d, old LT: %01x\n",
+				hba->ufshcd_state, ufs_vdi.lifetime);
+	}
+	return snprintf(buf, PAGE_SIZE, "%01x\n", ufs_vdi.lifetime);
+}
+static DEVICE_ATTR(lt, 0444, ufs_lt_show, NULL);
+
+static ssize_t ufs_lc_info_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%u\n", ufs_vdi.lc_info);
+}
+
+static ssize_t ufs_lc_info_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	unsigned int value;
+
+	if (kstrtou32(buf, 0, &value))
+		return -EINVAL;
+
+	ufs_vdi.lc_info = value;
+
+	return count;
+}
+static DEVICE_ATTR(lc, 0664, ufs_lc_info_show, ufs_lc_info_store);
+
+static ssize_t man_id_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+
+	return sprintf(buf, "%04x\n", hba->dev_info.wmanufacturerid);
+}
+static DEVICE_ATTR_RO(man_id);
+
+static ssize_t transferred_cnt_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+
+	return sprintf(buf, "%llu\n", host->transferred_bytes);
+}
+static DEVICE_ATTR_RO(transferred_cnt);
+
+static struct device *sec_ufs_cmd_dev;
+
+static struct attribute *sec_ufs_info_attributes[] = {
+	&dev_attr_un.attr,
+	&dev_attr_lt.attr,
+	&dev_attr_lc.attr,
+	&dev_attr_man_id.attr,
+	&dev_attr_transferred_cnt.attr,
+	NULL
+};
+
+static struct attribute_group sec_ufs_info_attribute_group = {
+	.attrs	= sec_ufs_info_attributes,
+};
+
+
+void ufs_sec_create_sysfs(struct ufs_hba *hba)
+{
+	int ret;
+
+	/* sec specific vendor sysfs nodes */
+	if (!sec_ufs_cmd_dev)
+		sec_ufs_cmd_dev = sec_device_create(hba, "ufs");
+
+	if (IS_ERR(sec_ufs_cmd_dev)) {
+			pr_err("Fail to create sysfs dev\n");
+	} else {
+		ret = sysfs_create_group(&sec_ufs_cmd_dev->kobj,
+				&sec_ufs_info_attribute_group);
+		if (ret)
+			dev_err(hba->dev, "%s: Failed to create sec_ufs_info sysfs group (err = %d)\n",
+					__func__, ret);
+	}
+}
 
 static int ufs_qcom_init_sysfs(struct ufs_hba *hba)
 {
@@ -3696,6 +3955,9 @@ static int ufs_qcom_init_sysfs(struct ufs_hba *hba)
 	if (ret)
 		dev_err(hba->dev, "%s: Failed to create qcom sysfs group (err = %d)\n",
 				 __func__, ret);
+
+	/* sec specific vendor sysfs nodes */
+	ufs_sec_create_sysfs(hba);
 
 	return ret;
 }

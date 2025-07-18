@@ -1469,6 +1469,10 @@ err:
 
 	pr_err("%s: error %d whilst initialising SD card\n",
 		mmc_hostname(host), err);
-
+	ST_LOG("%s: error %d whilst initialising SD card\n",
+		mmc_hostname(host), err);
+#if IS_ENABLED(CONFIG_SEC_MMC_FEATURE)
+	host->failed_init = true;
+#endif
 	return err;
 }

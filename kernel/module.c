@@ -153,6 +153,8 @@ static struct mod_tree_root {
 	.addr_min = -1UL,
 };
 
+void *sec_qc_summary_mod_tree = &mod_tree;
+
 #define module_addr_min mod_tree.addr_min
 #define module_addr_max mod_tree.addr_max
 

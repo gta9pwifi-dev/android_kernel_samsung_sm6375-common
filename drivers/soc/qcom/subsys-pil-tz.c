@@ -181,8 +181,10 @@ static int scm_pas_enable_bw(void)
 {
 	int ret = 0;
 
-	if (IS_ERR(scm_perf_client))
+	if (IS_ERR(scm_perf_client)) {
+		pr_info("shc_debug: scm_perf_clinet err\n");
 		return -EINVAL;
+	}
 
 	mutex_lock(&scm_pas_bw_mutex);
 	if (!scm_pas_bw_count) {
@@ -603,8 +605,10 @@ static int pil_init_image_trusted(struct pil_desc *pil,
 		return 0;
 
 	ret = scm_pas_enable_bw();
-	if (ret)
+	if (ret) {
+		pr_info("shc_debug: pil->name:%s fw_name, ret:%d\n", pil->name, pil->fw_name, ret);
 		return ret;
+	}
 
 	scm_ret = qcom_scm_pas_init_image(d->pas_id, metadata, size);
 
@@ -1560,6 +1564,10 @@ load_from_pil:
 		rc = PTR_ERR(d->subsys);
 		goto err_subsys;
 	}
+
+	/* NOTE: copy smem_state here for reset reason gpio */
+	if (!strncmp(d->subsys_desc.name, "modem", 5)) 
+		d->subsys_desc.state = d->state;
 
 	rc = subsys_setup_irqs(pdev);
 	if (rc) {
