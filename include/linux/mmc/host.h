@@ -597,12 +597,16 @@ struct mmc_host {
 	bool			hsq_enabled;
 #if defined(CONFIG_SDC_QTI)
 	bool                    need_hw_reset;
-	bool			partial_init_broken;
 #endif
 
 #if defined(CONFIG_SDC_QTI)
 	atomic_t active_reqs;
 #endif
+
+#if IS_ENABLED(CONFIG_SEC_MMC_FEATURE)
+	bool			failed_init;
+#endif
+
 	unsigned long		private[0] ____cacheline_aligned;
 };
 

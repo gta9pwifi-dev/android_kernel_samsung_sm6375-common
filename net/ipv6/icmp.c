@@ -410,10 +410,7 @@ static struct net_device *icmp6_dev(const struct sk_buff *skb)
 	if (unlikely(dev->ifindex == LOOPBACK_IFINDEX || netif_is_l3_master(skb->dev))) {
 		const struct rt6_info *rt6 = skb_rt6_info(skb);
 
-		/* The destination could be an external IP in Ext Hdr (SRv6, RPL, etc.),
-		 * and ip6_null_entry could be set to skb if no route is found.
-		 */
-		if (rt6 && rt6->rt6i_idev)
+		if (rt6)
 			dev = rt6->rt6i_idev->dev;
 	}
 

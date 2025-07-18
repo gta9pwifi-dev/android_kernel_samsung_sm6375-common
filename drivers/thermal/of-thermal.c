@@ -1528,7 +1528,12 @@ __init *thermal_of_build_thermal_zone(struct device_node *np)
 
 	tz->default_disable = of_property_read_bool(np,
 					"disable-thermal-zone");
-
+        /* +bug P86801AA1-3603, yexiaojun.wt, add, 20230605, add Macro control for disable thermal */
+        #ifdef CONFIG_WT_DISABLE_TEMP_CONTROL
+        tz->default_disable = 1;
+        pr_err("For test only set defulet_disable to 1, name: %s, tz->default_disable = %d in dts\n", np->name, tz->default_disable);
+        #endif
+        /* -bug P86801AA1-3603, yexiaojun.wt, add, 20230605, add Macro control for disable thermal */
 	ret = of_count_phandle_with_args(np, "thermal-sensors",
 						"#thermal-sensor-cells");
 	if (ret < 0) {

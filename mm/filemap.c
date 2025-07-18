@@ -43,6 +43,11 @@
 #include <linux/ramfs.h>
 #include "internal.h"
 
+
+#ifdef CONFIG_PAGE_BOOST_RECORDING
+#include <linux/io_record.h>
+#endif
+
 #define CREATE_TRACE_POINTS
 #include <trace/events/filemap.h>
 
@@ -1059,43 +1064,9 @@ struct wait_page_queue {
 	wait_queue_entry_t wait;
 };
 
-/*
- * The page wait code treats the "wait->flags" somewhat unusually, because
- * we have multiple different kinds of waits, not just he usual "exclusive"
- * one.
- *
- * We have:
- *
- *  (a) no special bits set:
- *
- *	We're just waiting for the bit to be released, and when a waker
- *	calls the wakeup function, we set WQ_FLAG_WOKEN and wake it up,
- *	and remove it from the wait queue.
- *
- *	Simple and straightforward.
- *
- *  (b) WQ_FLAG_EXCLUSIVE:
- *
- *	The waiter is waiting to get the lock, and only one waiter should
- *	be woken up to avoid any thundering herd behavior. We'll set the
- *	WQ_FLAG_WOKEN bit, wake it up, and remove it from the wait queue.
- *
- *	This is the traditional exclusive wait.
- *
- *  (b) WQ_FLAG_EXCLUSIVE | WQ_FLAG_CUSTOM:
- *
- *	The waiter is waiting to get the bit, and additionally wants the
- *	lock to be transferred to it for fair lock behavior. If the lock
- *	cannot be taken, we stop walking the wait queue without waking
- *	the waiter.
- *
- *	This is the "fair lock handoff" case, and in addition to setting
- *	WQ_FLAG_WOKEN, we set WQ_FLAG_DONE to let the waiter easily see
- *	that it now has the lock.
- */
 static int wake_page_function(wait_queue_entry_t *wait, unsigned mode, int sync, void *arg)
 {
-	unsigned int flags;
+	int ret;
 	struct wait_page_key *key = arg;
 	struct wait_page_queue *wait_page
 		= container_of(wait, struct wait_page_queue, wait);
@@ -1108,44 +1079,35 @@ static int wake_page_function(wait_queue_entry_t *wait, unsigned mode, int sync,
 		return 0;
 
 	/*
-	 * If it's a lock handoff wait, we get the bit for it, and
-	 * stop walking (and do not wake it up) if we can't.
-	 */
-	flags = wait->flags;
-	if (flags & WQ_FLAG_EXCLUSIVE) {
-		if (test_bit(key->bit_nr, &key->page->flags))
-			return -1;
-		if (flags & WQ_FLAG_CUSTOM) {
-			if (test_and_set_bit(key->bit_nr, &key->page->flags))
-				return -1;
-			flags |= WQ_FLAG_DONE;
-		}
-	}
-
-	/*
-	 * We are holding the wait-queue lock, but the waiter that
-	 * is waiting for this will be checking the flags without
-	 * any locking.
+	 * If it's an exclusive wait, we get the bit for it, and
+	 * stop walking if we can't.
 	 *
-	 * So update the flags atomically, and wake up the waiter
-	 * afterwards to avoid any races. This store-release pairs
-	 * with the load-acquire in wait_on_page_bit_common().
+	 * If it's a non-exclusive wait, then the fact that this
+	 * wake function was called means that the bit already
+	 * was cleared, and we don't care if somebody then
+	 * re-took it.
 	 */
-	smp_store_release(&wait->flags, flags | WQ_FLAG_WOKEN);
+	ret = 0;
+	if (wait->flags & WQ_FLAG_EXCLUSIVE) {
+		if (test_and_set_bit(key->bit_nr, &key->page->flags))
+			return -1;
+		ret = 1;
+	}
+	wait->flags |= WQ_FLAG_WOKEN;
+
 	wake_up_state(wait->private, mode);
 
 	/*
 	 * Ok, we have successfully done what we're waiting for,
 	 * and we can unconditionally remove the wait entry.
 	 *
-	 * Note that this pairs with the "finish_wait()" in the
-	 * waiter, and has to be the absolute last thing we do.
-	 * After this list_del_init(&wait->entry) the wait entry
+	 * Note that this has to be the absolute last thing we do,
+	 * since after list_del_init(&wait->entry) the wait entry
 	 * might be de-allocated and the process might even have
 	 * exited.
 	 */
 	list_del_init_careful(&wait->entry);
-	return (flags & WQ_FLAG_EXCLUSIVE) != 0;
+	return ret;
 }
 
 static void wake_up_page_bit(struct page *page, int bit_nr)
@@ -1225,8 +1187,8 @@ enum behavior {
 };
 
 /*
- * Attempt to check (or get) the page bit, and mark us done
- * if successful.
+ * Attempt to check (or get) the page bit, and mark the
+ * waiter woken if successful.
  */
 static inline bool trylock_page_bit_common(struct page *page, int bit_nr,
 					struct wait_queue_entry *wait)
@@ -1237,17 +1199,13 @@ static inline bool trylock_page_bit_common(struct page *page, int bit_nr,
 	} else if (test_bit(bit_nr, &page->flags))
 		return false;
 
-	wait->flags |= WQ_FLAG_WOKEN | WQ_FLAG_DONE;
+	wait->flags |= WQ_FLAG_WOKEN;
 	return true;
 }
-
-/* How many times do we accept lock stealing from under a waiter? */
-int sysctl_page_lock_unfairness = 5;
 
 static inline int wait_on_page_bit_common(wait_queue_head_t *q,
 	struct page *page, int bit_nr, int state, enum behavior behavior)
 {
-	int unfairness = sysctl_page_lock_unfairness;
 	struct wait_page_queue wait_page;
 	wait_queue_entry_t *wait = &wait_page.wait;
 	bool thrashing = false;
@@ -1265,17 +1223,10 @@ static inline int wait_on_page_bit_common(wait_queue_head_t *q,
 	}
 
 	init_wait(wait);
+	wait->flags = behavior == EXCLUSIVE ? WQ_FLAG_EXCLUSIVE : 0;
 	wait->func = wake_page_function;
 	wait_page.page = page;
 	wait_page.bit_nr = bit_nr;
-
-repeat:
-	wait->flags = 0;
-	if (behavior == EXCLUSIVE) {
-		wait->flags = WQ_FLAG_EXCLUSIVE;
-		if (--unfairness < 0)
-			wait->flags |= WQ_FLAG_CUSTOM;
-	}
 
 	/*
 	 * Do one last check whether we can get the
@@ -1299,63 +1250,27 @@ repeat:
 
 	/*
 	 * From now on, all the logic will be based on
-	 * the WQ_FLAG_WOKEN and WQ_FLAG_DONE flag, to
-	 * see whether the page bit testing has already
-	 * been done by the wake function.
+	 * the WQ_FLAG_WOKEN flag, and the and the page
+	 * bit testing (and setting) will be - or has
+	 * already been - done by the wake function.
 	 *
 	 * We can drop our reference to the page.
 	 */
 	if (behavior == DROP)
 		put_page(page);
 
-	/*
-	 * Note that until the "finish_wait()", or until
-	 * we see the WQ_FLAG_WOKEN flag, we need to
-	 * be very careful with the 'wait->flags', because
-	 * we may race with a waker that sets them.
-	 */
 	for (;;) {
-		unsigned int flags;
-
 		set_current_state(state);
 
-		/* Loop until we've been woken or interrupted */
-		flags = smp_load_acquire(&wait->flags);
-		if (!(flags & WQ_FLAG_WOKEN)) {
-			if (signal_pending_state(state, current))
-				break;
-
-			io_schedule();
-			continue;
-		}
-
-		/* If we were non-exclusive, we're done */
-		if (behavior != EXCLUSIVE)
+		if (signal_pending_state(state, current))
 			break;
 
-		/* If the waker got the lock for us, we're done */
-		if (flags & WQ_FLAG_DONE)
+		if (wait->flags & WQ_FLAG_WOKEN)
 			break;
 
-		/*
-		 * Otherwise, if we're getting the lock, we need to
-		 * try to get it ourselves.
-		 *
-		 * And if that fails, we'll have to retry this all.
-		 */
-		if (unlikely(test_and_set_bit(bit_nr, &page->flags)))
-			goto repeat;
-
-		wait->flags |= WQ_FLAG_DONE;
-		break;
+		io_schedule();
 	}
 
-	/*
-	 * If a signal happened, this 'finish_wait()' may remove the last
-	 * waiter from the wait-queues, but the PageWaiters bit will remain
-	 * set. That's ok. The next wakeup will take care of it, and trying
-	 * to do it here would be difficult and prone to races.
-	 */
 	finish_wait(q, wait);
 
 	if (thrashing) {
@@ -1365,20 +1280,12 @@ repeat:
 	}
 
 	/*
-	 * NOTE! The wait->flags weren't stable until we've done the
-	 * 'finish_wait()', and we could have exited the loop above due
-	 * to a signal, and had a wakeup event happen after the signal
-	 * test but before the 'finish_wait()'.
-	 *
-	 * So only after the finish_wait() can we reliably determine
-	 * if we got woken up or not, so we can now figure out the final
-	 * return value based on that state without races.
-	 *
-	 * Also note that WQ_FLAG_WOKEN is sufficient for a non-exclusive
-	 * waiter, but an exclusive one requires WQ_FLAG_DONE.
+	 * A signal could leave PageWaiters set. Clearing it here if
+	 * !waitqueue_active would be possible (by open-coding finish_wait),
+	 * but still fail to catch it in the case of wait hash collision. We
+	 * already can fail to clear wait hash collision cases, so don't
+	 * bother with signals either.
 	 */
-	if (behavior == EXCLUSIVE)
-		return wait->flags & WQ_FLAG_DONE ? 0 : -EINTR;
 
 	return wait->flags & WQ_FLAG_WOKEN ? 0 : -EINTR;
 }
@@ -2203,6 +2110,9 @@ static ssize_t generic_file_buffered_read(struct kiocb *iocb,
 	prev_offset = ra->prev_pos & (PAGE_SIZE-1);
 	last_index = (*ppos + iter->count + PAGE_SIZE-1) >> PAGE_SHIFT;
 	offset = *ppos & ~PAGE_MASK;
+#ifdef CONFIG_PAGE_BOOST_RECORDING
+	record_io_info(filp, index, last_index - index);
+#endif
 
 	for (;;) {
 		struct page *page;
@@ -2502,6 +2412,13 @@ EXPORT_SYMBOL(generic_file_read_iter);
 
 #ifdef CONFIG_MMU
 #define MMAP_LOTSAMISS  (100)
+
+#if CONFIG_MMAP_READAROUND_LIMIT == 0
+unsigned int mmap_readaround_limit = VM_READAHEAD_PAGES; 		/* page */
+#else
+unsigned int mmap_readaround_limit = CONFIG_MMAP_READAROUND_LIMIT;	/* page */
+#endif
+
 /*
  * lock_page_maybe_drop_mmap - lock the page, possibly dropping the mmap_sem
  * @vmf - the vm_fault for this fault.
@@ -2545,6 +2462,33 @@ static int lock_page_maybe_drop_mmap(struct vm_fault *vmf, struct page *page,
 	return 1;
 }
 
+#ifdef CONFIG_TRACING
+static void filemap_tracing_mark_begin(struct file *file,
+		pgoff_t offset, unsigned int size, bool sync)
+{
+	char buf[TRACING_MARK_BUF_SIZE], *path;
+
+	if (!tracing_is_on())
+		return;
+
+	path = file_path(file, buf, TRACING_MARK_BUF_SIZE);
+	if (IS_ERR(path)) {
+		sprintf(buf, "file_path failed(%ld)", PTR_ERR(path));
+		path = buf;
+	}
+
+	tracing_mark_begin("%d , %s , %lu , %d", sync, path, offset, size);
+}
+
+static void filemap_tracing_mark_end(void)
+{
+    tracing_mark_end();
+}
+#else
+static void filemap_tracing_mark_begin(struct file *file,
+		pgoff_t offset, unsigned int size, bool sync) { }
+static void filemap_tracing_mark_end(void) { }
+#endif
 
 /*
  * Synchronous readahead happens when we don't even find a page in the page
@@ -2560,6 +2504,7 @@ static struct file *do_sync_mmap_readahead(struct vm_fault *vmf)
 	struct address_space *mapping = file->f_mapping;
 	struct file *fpin = NULL;
 	pgoff_t offset = vmf->pgoff;
+	unsigned int ra_pages;
 
 	/* If we don't want any read-ahead, don't bother */
 	if (vmf->vma_flags & VM_RAND_READ)
@@ -2569,8 +2514,10 @@ static struct file *do_sync_mmap_readahead(struct vm_fault *vmf)
 
 	if (vmf->vma_flags & VM_SEQ_READ) {
 		fpin = maybe_unlock_mmap_for_io(vmf, fpin);
+		filemap_tracing_mark_begin(file, offset, ra->ra_pages, 1);
 		page_cache_sync_readahead(mapping, ra, file, offset,
 					  ra->ra_pages);
+		filemap_tracing_mark_end();
 		return fpin;
 	}
 
@@ -2589,10 +2536,13 @@ static struct file *do_sync_mmap_readahead(struct vm_fault *vmf)
 	 * mmap read-around
 	 */
 	fpin = maybe_unlock_mmap_for_io(vmf, fpin);
-	ra->start = max_t(long, 0, offset - ra->ra_pages / 2);
-	ra->size = ra->ra_pages;
-	ra->async_size = ra->ra_pages / 4;
+	ra_pages = min_t(unsigned int, ra->ra_pages, mmap_readaround_limit);
+	ra->start = max_t(long, 0, offset - ra_pages / 2);
+	ra->size = ra_pages;
+	ra->async_size = ra_pages / 4;
+	filemap_tracing_mark_begin(file, offset, ra_pages, 1);
 	ra_submit(ra, mapping, file);
+	filemap_tracing_mark_end();
 	return fpin;
 }
 
@@ -2617,8 +2567,10 @@ static struct file *do_async_mmap_readahead(struct vm_fault *vmf,
 		ra->mmap_miss--;
 	if (PageReadahead(page)) {
 		fpin = maybe_unlock_mmap_for_io(vmf, fpin);
+		filemap_tracing_mark_begin(file, offset, ra->ra_pages, 0);
 		page_cache_async_readahead(mapping, ra, file,
 					   page, offset, ra->ra_pages);
+		filemap_tracing_mark_end();
 	}
 	return fpin;
 }
@@ -2789,7 +2741,9 @@ page_not_uptodate:
 	 */
 	ClearPageError(page);
 	fpin = maybe_unlock_mmap_for_io(vmf, fpin);
+	filemap_tracing_mark_begin(file, offset, 1, 1);
 	error = mapping->a_ops->readpage(file, page);
+	filemap_tracing_mark_end();
 	if (!error) {
 		wait_on_page_locked(page);
 		if (!PageUptodate(page))
@@ -2894,6 +2848,11 @@ next:
 			break;
 	}
 	rcu_read_unlock();
+
+#ifdef CONFIG_PAGE_BOOST_RECORDING
+	/* end_pgoff is inclusive */
+	record_io_info(file, start_pgoff, last_pgoff - start_pgoff + 1);
+#endif
 }
 EXPORT_SYMBOL(filemap_map_pages);
 

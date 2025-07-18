@@ -645,16 +645,6 @@ config MINIDUMP_MAX_ENTRIES
 	  This defines maximum number of entries to be allocated for application
 	  subsytem in Minidump table.
 
-config QCOM_MINIDUMP_ENCRYPT
-	bool "QCOM Minidump Encryption Required"
-	depends on QCOM_MINIDUMP
-	default y
-	help
-	  This adds a support to decide whether the regions in minidump
-	  table should be encrypted or not. By default, encryption is done
-	  by the boot firmware and the decision for encryption is taken by
-	  the subsystems.
-
 config QCOM_MICRODUMP
 	tristate "Qualcomm Technologies, Inc. Microdump Support"
 	depends on MSM_SUBSYSTEM_RESTART
@@ -760,7 +750,13 @@ config SENSORS_SSC
 	  support for Qualcomm Technologies, Inc SoCs. SSC is used for
 	  exercising sensor use-cases. This driver loads firmware files
 	  for SSC and also does time synchronization with DSP clock.
-
+#+P86801AA1, ludandan2.wt, add, 2023.05.06, sensor bringup
+config SENSORS
+	tristate "Sensors Class Support"
+	help
+	This option enables the sensor sysfs class in /sys/class/sensors.
+	You'll need this to do anything useful with sensors. If unsure, say N.
+#-P86801AA1, ludandan2.wt, add, 2023.05.06, sensor bringup
 config QSEE_IPC_IRQ
 	tristate "QSEE interrupt manager"
 	help
@@ -1142,8 +1138,8 @@ config QCOM_WDOG_BITE_EARLY_PANIC
 config QCOM_WATCHDOG_BARK_TIME
 	depends on QCOM_WDT_CORE
 	int "Qualcomm Technologies, Inc. Watchdog bark time in ms"
-	default 11000
-	range 11000 11000
+	default 15000
+	range 15000 15000
 	help
 	  The amount of time, in milliseconds, that should elapse after
 	  a watchdog timer reset before a bark interrupt is sent from the
@@ -1152,8 +1148,8 @@ config QCOM_WATCHDOG_BARK_TIME
 config QCOM_WATCHDOG_PET_TIME
 	depends on QCOM_WDT_CORE
 	int "Qualcomm Technologies, Inc. Watchdog pet time in ms"
-	default 9360
-	range 9360 9360
+	default 8000
+	range 8000 8000
 	help
 	  The amount of time, in milliseconds, that should elapse before
 	  a watchdog pet is initiated to reset the watchdog timer to 0.
@@ -1366,6 +1362,20 @@ config SDX_EXT_IPC
       state by reading ipc gpios.
 
       If unsure, say N.
+
+config WT_SECUREBOOT_FUSE_STATE
+	tristate "WT driver for check secureboot state."
+	help
+      This driver is a API for check secureboot state. If enable this driver,
+      we can through below adb command to check secureboot state:
+      adb root ; adb shell cat /proc/secureboot_fuse_reg.
+
+config WT_SERIAL_NUMBER_STATE
+	tristate "WT driver for check serial_num state."
+	help
+      This driver is a API for check serial_num state. If enable this driver,
+      we can through below adb command to check serial_num state:
+      adb root ; adb shell cat /proc/serial_num.
 
 source "drivers/soc/qcom/icnss2/Kconfig"
 

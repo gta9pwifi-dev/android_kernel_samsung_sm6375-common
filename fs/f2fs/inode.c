@@ -23,9 +23,6 @@ void f2fs_mark_inode_dirty_sync(struct inode *inode, bool sync)
 	if (is_inode_flag_set(inode, FI_NEW_INODE))
 		return;
 
-	if (f2fs_readonly(F2FS_I_SB(inode)->sb))
-		return;
-
 	if (f2fs_inode_dirtied(inode, sync))
 		return;
 
@@ -320,12 +317,6 @@ static bool sanity_check_inode(struct inode *inode, struct page *node_page)
 		}
 	}
 
-	if (fi->i_xattr_nid && f2fs_check_nid_range(sbi, fi->i_xattr_nid)) {
-		f2fs_warn(sbi, "%s: inode (ino=%lx) has corrupted i_xattr_nid: %u, run fsck to fix.",
-			  __func__, inode->i_ino, fi->i_xattr_nid);
-		return false;
-	}
-
 	return true;
 }
 
@@ -465,6 +456,13 @@ static int do_read_inode(struct inode *inode)
 	F2FS_I(inode)->i_disk_time[1] = inode->i_ctime;
 	F2FS_I(inode)->i_disk_time[2] = inode->i_mtime;
 	F2FS_I(inode)->i_disk_time[3] = F2FS_I(inode)->i_crtime;
+
+	if (unlikely((inode->i_mode & S_IFMT) == 0)) {
+		print_block_data(sbi->sb, inode->i_ino, page_address(node_page),
+				0, F2FS_BLKSIZE);
+		f2fs_bug_on(sbi, 1);
+	}
+
 	f2fs_put_page(node_page, 1);
 
 	stat_inc_inline_xattr(inode);
@@ -690,10 +688,8 @@ int f2fs_write_inode(struct inode *inode, struct writeback_control *wbc)
 		!is_inode_flag_set(inode, FI_DIRTY_INODE))
 		return 0;
 
-	if (!f2fs_is_checkpoint_ready(sbi)) {
-		f2fs_mark_inode_dirty_sync(inode, true);
+	if (!f2fs_is_checkpoint_ready(sbi))
 		return -ENOSPC;
-	}
 
 	/*
 	 * We need to balance fs here to prevent from producing dirty node pages

@@ -589,6 +589,12 @@ void __pm_stay_awake(struct wakeup_source *ws)
 
 	if (!ws)
 		return;
+	//+P86801AA1-3866, yexiaojun.wt, modify, 20230519, add active wakeup source log
+	//if(ws->name && !strcmp(ws->name, "NETLINK")){
+	//	pr_info("Watch: next line, __pm_stay_awake:%s\n", ws->name);
+	//	dump_stack();
+	//}
+	//-P86801AA1-3866, yexiaojun.wt, modify, 20230519, add active wakeup source log
 
 	spin_lock_irqsave(&ws->lock, flags);
 
@@ -862,7 +868,12 @@ void pm_print_active_wakeup_sources(void)
 	srcuidx = srcu_read_lock(&wakeup_srcu);
 	list_for_each_entry_rcu(ws, &wakeup_sources, entry) {
 		if (ws->active) {
-			pm_pr_dbg("active wakeup source: %s\n", ws->name);
+			//+P86801AA1-3866, yexiaojun.wt, modify, 20230519, add active wakeup source log
+			//if(!strcmp(ws->name, "NETLINK")){
+			//	dump_stack();
+			//}
+			pr_info("active wakeup source: %s\n", ws->name);
+			//-P86801AA1-3866, yexiaojun.wt, modify, 20230519, add active wakeup source log
 			active = 1;
 		} else if (!active &&
 			   (!last_activity_ws ||
@@ -873,7 +884,8 @@ void pm_print_active_wakeup_sources(void)
 	}
 
 	if (!active && last_activity_ws)
-		pm_pr_dbg("last active wakeup source: %s\n",
+        //+P86801AA1-3866, yexiaojun.wt, modify, 20230519, add active wakeup source log
+		pr_info("last active wakeup source: %s\n",
 			last_activity_ws->name);
 	srcu_read_unlock(&wakeup_srcu, srcuidx);
 }
@@ -1111,8 +1123,9 @@ static int print_wakeup_source_stats(struct seq_file *m,
 	} else {
 		active_time = 0;
 	}
-
-	seq_printf(m, "%-12s\t%lu\t\t%lu\t\t%lu\t\t%lu\t\t%lld\t\t%lld\t\t%lld\t\t%lld\t\t%lld\n",
+    //+P86801AA1-3866, yexiaojun.wt, modify, 20230519, align wakeupsources
+	//seq_printf(m, "%-12s\t%lu\t\t%lu\t\t%lu\t\t%lu\t\t%lld\t\t%lld\t\t%lld\t\t%lld\t\t%lld\n",
+    seq_printf(m,"%-35s%-15lu%-15lu%-15lu%-15lu%-15lld%-15lld%-15lld%-15lld%-15lld\n",
 		   ws->name, active_count, ws->event_count,
 		   ws->wakeup_count, ws->expire_count,
 		   ktime_to_ms(active_time), ktime_to_ms(total_time),
@@ -1132,10 +1145,17 @@ static void *wakeup_sources_stats_seq_start(struct seq_file *m,
 	int *srcuidx = m->private;
 
 	if (n == 0) {
+        	//+86801AA1-3866, yexiaojun.wt, modify, 20230519, align wakeupsources
+        	/*
 		seq_puts(m, "name\t\tactive_count\tevent_count\twakeup_count\t"
 			"expire_count\tactive_since\ttotal_time\tmax_time\t"
 			"last_change\tprevent_suspend_time\n");
-	}
+        	*/
+                seq_printf(m,"%-35s%-15s%-15s%-15s%-15s%-15s%-15s%-15s%-15s%-15s\n",
+                "name","active_count","event_count","wakeup_count","expire_count",
+                "active_since","total_time","max_time","last_change","prevent_suspend_time\n"); 
+               //-P86801AA1-3866, yexiaojun.wt, modify, 20230519, align wakeupsources
+	}  
 
 	*srcuidx = srcu_read_lock(&wakeup_srcu);
 	list_for_each_entry_rcu(ws, &wakeup_sources, entry) {

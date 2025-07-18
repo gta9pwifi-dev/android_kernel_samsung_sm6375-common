@@ -552,8 +552,7 @@ static int msg_loop(int fd, int iov_count, int iov_length, int cnt,
 				}
 			}
 
-			if (recv > 0)
-				s->bytes_recvd += recv;
+			s->bytes_recvd += recv;
 
 			if (data) {
 				int chunk_sz = opt->sendpage ?

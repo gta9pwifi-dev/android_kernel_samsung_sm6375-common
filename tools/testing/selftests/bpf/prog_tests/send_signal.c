@@ -174,8 +174,7 @@ static void test_send_signal_tracepoint(void)
 static void test_send_signal_perf(void)
 {
 	struct perf_event_attr attr = {
-		.freq = 1,
-		.sample_freq = 1000,
+		.sample_period = 1,
 		.type = PERF_TYPE_SOFTWARE,
 		.config = PERF_COUNT_SW_CPU_CLOCK,
 	};

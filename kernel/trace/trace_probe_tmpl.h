@@ -54,7 +54,7 @@ fetch_apply_bitfield(struct fetch_insn *code, void *buf)
  * If dest is NULL, don't store result and return required dynamic data size.
  */
 static int
-process_fetch_insn(struct fetch_insn *code, void *rec,
+process_fetch_insn(struct fetch_insn *code, struct pt_regs *regs,
 		   void *dest, void *base);
 static nokprobe_inline int fetch_store_strlen(unsigned long addr);
 static nokprobe_inline int
@@ -143,8 +143,6 @@ stage3:
 array:
 	/* the last stage: Loop on array */
 	if (code->op == FETCH_OP_LP_ARRAY) {
-		if (ret < 0)
-			ret = 0;
 		total += ret;
 		if (++i < code->param) {
 			code = s3;
@@ -190,7 +188,7 @@ __get_data_size(struct trace_probe *tp, struct pt_regs *regs)
 
 /* Store the value of each argument */
 static nokprobe_inline void
-store_trace_args(void *data, struct trace_probe *tp, void *rec,
+store_trace_args(void *data, struct trace_probe *tp, struct pt_regs *regs,
 		 int header_size, int maxlen)
 {
 	struct probe_arg *arg;
@@ -205,14 +203,12 @@ store_trace_args(void *data, struct trace_probe *tp, void *rec,
 		/* Point the dynamic data area if needed */
 		if (unlikely(arg->dynamic))
 			*dl = make_data_loc(maxlen, dyndata - base);
-		ret = process_fetch_insn(arg->code, rec, dl, base);
-		if (arg->dynamic) {
-			if (unlikely(ret < 0)) {
-				*dl = make_data_loc(0, dyndata - base);
-			} else {
-				dyndata += ret;
-				maxlen -= ret;
-			}
+		ret = process_fetch_insn(arg->code, regs, dl, base);
+		if (unlikely(ret < 0 && arg->dynamic)) {
+			*dl = make_data_loc(0, dyndata - base);
+		} else {
+			dyndata += ret;
+			maxlen -= ret;
 		}
 	}
 }

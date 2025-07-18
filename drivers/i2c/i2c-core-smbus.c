@@ -15,7 +15,8 @@
 #include <linux/i2c.h>
 #include <linux/i2c-smbus.h>
 #include <linux/slab.h>
-
+/* P86801AA1-13544, gudi1@wt, add 20231017, usb if*/
+#include <linux/cpuidle.h>
 #include "i2c-core.h"
 
 #define CREATE_TRACE_POINTS
@@ -534,7 +535,11 @@ s32 i2c_smbus_xfer(struct i2c_adapter *adapter, u16 addr,
 		   u8 command, int protocol, union i2c_smbus_data *data)
 {
 	s32 res;
-
+/*+ P86801AA1-13544, gudi1@wt, add 20231017, usb if*/
+//#ifdef CONFIG_QGKI_BUILD
+	//cpuidle_pause();//P231018-03087,gudi.wt,20231103,fix mutex dead lock
+//#endif //CONFIG_QGKI_BUILD
+/*- P86801AA1-13544, gudi1@wt, add 20231017, usb if*/
 	res = __i2c_lock_bus_helper(adapter);
 	if (res)
 		return res;
@@ -542,7 +547,11 @@ s32 i2c_smbus_xfer(struct i2c_adapter *adapter, u16 addr,
 	res = __i2c_smbus_xfer(adapter, addr, flags, read_write,
 			       command, protocol, data);
 	i2c_unlock_bus(adapter, I2C_LOCK_SEGMENT);
-
+/*+ P86801AA1-13544, gudi1@wt, add 20231017, usb if*/
+//#ifdef CONFIG_QGKI_BUILD
+	//cpuidle_resume();//P231018-03087,gudi.wt,20231103,fix mutex dead lock
+//#endif //CONFIG_QGKI_BUILD
+/*- P86801AA1-13544, gudi1@wt, add 20231017, usb if*/
 	return res;
 }
 EXPORT_SYMBOL(i2c_smbus_xfer);

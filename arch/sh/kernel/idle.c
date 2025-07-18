@@ -15,7 +15,6 @@
 #include <linux/smp.h>
 #include <linux/atomic.h>
 #include <asm/pgalloc.h>
-#include <asm/processor.h>
 #include <asm/smp.h>
 #include <asm/bl_bit.h>
 

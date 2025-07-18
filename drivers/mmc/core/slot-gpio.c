@@ -37,6 +37,11 @@ static irqreturn_t mmc_gpio_cd_irqt(int irq, void *dev_id)
 	host->corrupted_card = false;
 #endif
 
+#if IS_ENABLED(CONFIG_SEC_MMC_FEATURE)
+	if (mmc_gpio_get_cd(host) == 0)
+		host->failed_init = false;
+#endif
+
 	host->trigger_card_event = true;
 	mmc_detect_change(host, msecs_to_jiffies(ctx->cd_debounce_delay_ms));
 
@@ -68,15 +73,11 @@ int mmc_gpio_alloc(struct mmc_host *host)
 int mmc_gpio_get_ro(struct mmc_host *host)
 {
 	struct mmc_gpio *ctx = host->slot.handler_priv;
-	int cansleep;
 
 	if (!ctx || !ctx->ro_gpio)
 		return -ENOSYS;
 
-	cansleep = gpiod_cansleep(ctx->ro_gpio);
-	return cansleep ?
-		gpiod_get_value_cansleep(ctx->ro_gpio) :
-		gpiod_get_value(ctx->ro_gpio);
+	return gpiod_get_value_cansleep(ctx->ro_gpio);
 }
 EXPORT_SYMBOL(mmc_gpio_get_ro);
 

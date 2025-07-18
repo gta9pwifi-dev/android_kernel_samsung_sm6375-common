@@ -39,6 +39,12 @@ struct scsi_transport_template;
 #define SG_NONE 0
 #define SG_ALL	SG_CHUNK_SIZE
 
+#ifdef CONFIG_ARCH_NO_SG_CHAIN
+#define SG_UFS SG_ALL
+#else
+#define SG_UFS 256
+#endif
+
 #define MODE_UNKNOWN 0x00
 #define MODE_INITIATOR 0x01
 #define MODE_TARGET 0x02
@@ -753,7 +759,7 @@ extern void scsi_remove_host(struct Scsi_Host *);
 extern struct Scsi_Host *scsi_host_get(struct Scsi_Host *);
 extern int scsi_host_busy(struct Scsi_Host *shost);
 extern void scsi_host_put(struct Scsi_Host *t);
-extern struct Scsi_Host *scsi_host_lookup(unsigned int hostnum);
+extern struct Scsi_Host *scsi_host_lookup(unsigned short);
 extern const char *scsi_host_state_name(enum scsi_host_state);
 
 static inline int __must_check scsi_add_host(struct Scsi_Host *host,

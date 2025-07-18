@@ -651,8 +651,7 @@ ieee80211_tx_h_select_key(struct ieee80211_tx_data *tx)
 		}
 
 		if (unlikely(tx->key && tx->key->flags & KEY_FLAG_TAINTED &&
-			     !ieee80211_is_deauth(hdr->frame_control)) &&
-			     tx->skb->protocol != tx->sdata->control_port_protocol)
+			     !ieee80211_is_deauth(hdr->frame_control)))
 			return TX_DROP;
 
 		if (!skip_hw && tx->key &&
@@ -2034,34 +2033,15 @@ void ieee80211_xmit(struct ieee80211_sub_if_data *sdata,
 	ieee80211_tx(sdata, sta, skb, false, txdata_flags);
 }
 
-static bool ieee80211_validate_radiotap_len(struct sk_buff *skb)
+static bool ieee80211_parse_tx_radiotap(struct ieee80211_local *local,
+					struct sk_buff *skb)
 {
-	struct ieee80211_radiotap_header *rthdr =
-		(struct ieee80211_radiotap_header *)skb->data;
-
-	/* check for not even having the fixed radiotap header part */
-	if (unlikely(skb->len < sizeof(struct ieee80211_radiotap_header)))
-		return false; /* too short to be possibly valid */
-
-	/* is it a header version we can trust to find length from? */
-	if (unlikely(rthdr->it_version))
-		return false; /* only version 0 is supported */
-
-	/* does the skb contain enough to deliver on the alleged length? */
-	if (unlikely(skb->len < ieee80211_get_radiotap_len(skb->data)))
-		return false; /* skb too short for claimed rt header extent */
-
-	return true;
-}
-
-bool ieee80211_parse_tx_radiotap(struct sk_buff *skb,
-				 struct net_device *dev)
-{
-	struct ieee80211_local *local = wdev_priv(dev->ieee80211_ptr);
 	struct ieee80211_radiotap_iterator iterator;
 	struct ieee80211_radiotap_header *rthdr =
 		(struct ieee80211_radiotap_header *) skb->data;
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
+	struct ieee80211_supported_band *sband =
+		local->hw.wiphy->bands[info->band];
 	int ret = ieee80211_radiotap_iterator_init(&iterator, rthdr, skb->len,
 						   NULL);
 	u16 txflags;
@@ -2073,9 +2053,6 @@ bool ieee80211_parse_tx_radiotap(struct sk_buff *skb,
 	u16 vht_known;
 	u8 vht_mcs = 0, vht_nss = 0;
 	int i;
-
-	if (!ieee80211_validate_radiotap_len(skb))
-		return false;
 
 	info->flags |= IEEE80211_TX_INTFL_DONT_ENCRYPT |
 		       IEEE80211_TX_CTL_DONTFRAG;
@@ -2201,9 +2178,6 @@ bool ieee80211_parse_tx_radiotap(struct sk_buff *skb,
 		return false;
 
 	if (rate_found) {
-		struct ieee80211_supported_band *sband =
-			local->hw.wiphy->bands[info->band];
-
 		info->control.flags |= IEEE80211_TX_CTRL_RATE_INJECT;
 
 		for (i = 0; i < IEEE80211_TX_MAX_RATES; i++) {
@@ -2217,7 +2191,7 @@ bool ieee80211_parse_tx_radiotap(struct sk_buff *skb,
 		} else if (rate_flags & IEEE80211_TX_RC_VHT_MCS) {
 			ieee80211_rate_set_vht(info->control.rates, vht_mcs,
 					       vht_nss);
-		} else if (sband) {
+		} else {
 			for (i = 0; i < sband->n_bitrates; i++) {
 				if (rate * 5 != sband->bitrates[i].bitrate)
 					continue;
@@ -2235,6 +2209,13 @@ bool ieee80211_parse_tx_radiotap(struct sk_buff *skb,
 						     local->hw.max_rate_tries);
 	}
 
+	/*
+	 * remove the radiotap header
+	 * iterator->_max_length was sanity-checked against
+	 * skb->len by iterator init
+	 */
+	skb_pull(skb, iterator._max_length);
+
 	return true;
 }
 
@@ -2243,6 +2224,8 @@ netdev_tx_t ieee80211_monitor_start_xmit(struct sk_buff *skb,
 {
 	struct ieee80211_local *local = wdev_priv(dev->ieee80211_ptr);
 	struct ieee80211_chanctx_conf *chanctx_conf;
+	struct ieee80211_radiotap_header *prthdr =
+		(struct ieee80211_radiotap_header *)skb->data;
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
 	struct ieee80211_hdr *hdr;
 	struct ieee80211_sub_if_data *tmp_sdata, *sdata;
@@ -2250,16 +2233,20 @@ netdev_tx_t ieee80211_monitor_start_xmit(struct sk_buff *skb,
 	u16 len_rthdr;
 	int hdrlen;
 
-	memset(info, 0, sizeof(*info));
-	info->flags = IEEE80211_TX_CTL_REQ_TX_STATUS |
-		      IEEE80211_TX_CTL_INJECTED;
+	/* check for not even having the fixed radiotap header part */
+	if (unlikely(skb->len < sizeof(struct ieee80211_radiotap_header)))
+		goto fail; /* too short to be possibly valid */
 
-	/* Sanity-check the length of the radiotap header */
-	if (!ieee80211_validate_radiotap_len(skb))
-		goto fail;
+	/* is it a header version we can trust to find length from? */
+	if (unlikely(prthdr->it_version))
+		goto fail; /* only version 0 is supported */
 
-	/* we now know there is a radiotap header with a length we can use */
+	/* then there must be a radiotap header with a length we can use */
 	len_rthdr = ieee80211_get_radiotap_len(skb->data);
+
+	/* does the skb contain enough to deliver on the alleged length? */
+	if (unlikely(skb->len < len_rthdr))
+		goto fail; /* skb too short for claimed rt header extent */
 
 	/*
 	 * fix up the pointers accounting for the radiotap
@@ -2305,6 +2292,11 @@ netdev_tx_t ieee80211_monitor_start_xmit(struct sk_buff *skb,
 		u8 *p = ieee80211_get_qos_ctl(hdr);
 		skb->priority = *p & IEEE80211_QOS_CTL_TAG1D_MASK;
 	}
+
+	memset(info, 0, sizeof(*info));
+
+	info->flags = IEEE80211_TX_CTL_REQ_TX_STATUS |
+		      IEEE80211_TX_CTL_INJECTED;
 
 	rcu_read_lock();
 
@@ -2368,16 +2360,9 @@ netdev_tx_t ieee80211_monitor_start_xmit(struct sk_buff *skb,
 
 	info->band = chandef->chan->band;
 
-	/*
-	 * Process the radiotap header. This will now take into account the
-	 * selected chandef above to accurately set injection rates and
-	 * retransmissions.
-	 */
-	if (!ieee80211_parse_tx_radiotap(skb, dev))
+	/* process and remove the injection radiotap header */
+	if (!ieee80211_parse_tx_radiotap(local, skb))
 		goto fail_rcu;
-
-	/* remove the injection radiotap header */
-	skb_pull(skb, len_rthdr);
 
 	ieee80211_xmit(sdata, NULL, skb, 0);
 	rcu_read_unlock();
@@ -2933,7 +2918,7 @@ void ieee80211_check_fast_xmit(struct sta_info *sta)
 	    sdata->vif.type == NL80211_IFTYPE_STATION)
 		goto out;
 
-	if (!test_sta_flag(sta, WLAN_STA_AUTHORIZED) || !sta->uploaded)
+	if (!test_sta_flag(sta, WLAN_STA_AUTHORIZED))
 		goto out;
 
 	if (test_sta_flag(sta, WLAN_STA_PS_STA) ||

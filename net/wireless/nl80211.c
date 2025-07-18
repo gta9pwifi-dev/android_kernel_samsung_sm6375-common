@@ -3475,7 +3475,6 @@ static int nl80211_dump_interface(struct sk_buff *skb, struct netlink_callback *
 			if_idx++;
 		}
 
-		if_start = 0;
 		wp_idx++;
 	}
  out:
@@ -3651,8 +3650,6 @@ static int nl80211_set_interface(struct sk_buff *skb, struct genl_info *info)
 		struct wireless_dev *wdev = dev->ieee80211_ptr;
 
 		if (ntype != NL80211_IFTYPE_MESH_POINT)
-			return -EINVAL;
-		if (otype != NL80211_IFTYPE_MESH_POINT)
 			return -EINVAL;
 		if (netif_running(dev))
 			return -EBUSY;
@@ -3848,7 +3845,10 @@ static void get_key_callback(void *c, struct key_params *params)
 	struct nlattr *key;
 	struct get_key_cookie *cookie = c;
 
-	if ((params->seq &&
+	if ((params->key &&
+	     nla_put(cookie->msg, NL80211_ATTR_KEY_DATA,
+		     params->key_len, params->key)) ||
+	    (params->seq &&
 	     nla_put(cookie->msg, NL80211_ATTR_KEY_SEQ,
 		     params->seq_len, params->seq)) ||
 	    (params->cipher &&
@@ -3860,7 +3860,10 @@ static void get_key_callback(void *c, struct key_params *params)
 	if (!key)
 		goto nla_put_failure;
 
-	if ((params->seq &&
+	if ((params->key &&
+	     nla_put(cookie->msg, NL80211_KEY_DATA,
+		     params->key_len, params->key)) ||
+	    (params->seq &&
 	     nla_put(cookie->msg, NL80211_KEY_SEQ,
 		     params->seq_len, params->seq)) ||
 	    (params->cipher &&
@@ -4405,8 +4408,7 @@ static const struct nla_policy nl80211_txattr_policy[NL80211_TXRATE_MAX + 1] = {
 };
 
 static int nl80211_parse_tx_bitrate_mask(struct genl_info *info,
-					 struct cfg80211_bitrate_mask *mask,
-					 bool default_all_enabled)
+					 struct cfg80211_bitrate_mask *mask)
 {
 	struct nlattr *tb[NL80211_TXRATE_MAX + 1];
 	struct cfg80211_registered_device *rdev = info->user_ptr[0];
@@ -4418,9 +4420,6 @@ static int nl80211_parse_tx_bitrate_mask(struct genl_info *info,
 	memset(mask, 0, sizeof(*mask));
 	/* Default to all rates enabled */
 	for (i = 0; i < NUM_NL80211_BANDS; i++) {
-		if (!default_all_enabled)
-			break;
-
 		sband = rdev->wiphy.bands[i];
 
 		if (!sband)
@@ -4944,7 +4943,7 @@ static int nl80211_start_ap(struct sk_buff *skb, struct genl_info *info)
 		return -EINVAL;
 
 	if (info->attrs[NL80211_ATTR_TX_RATES]) {
-		err = nl80211_parse_tx_bitrate_mask(info, &params.beacon_rate, false);
+		err = nl80211_parse_tx_bitrate_mask(info, &params.beacon_rate);
 		if (err)
 			return err;
 
@@ -7129,7 +7128,7 @@ static int nl80211_update_mesh_config(struct sk_buff *skb,
 	struct cfg80211_registered_device *rdev = info->user_ptr[0];
 	struct net_device *dev = info->user_ptr[1];
 	struct wireless_dev *wdev = dev->ieee80211_ptr;
-	struct mesh_config cfg = {};
+	struct mesh_config cfg;
 	u32 mask;
 	int err;
 
@@ -8236,8 +8235,7 @@ nl80211_parse_sched_scan(struct wiphy *wiphy, struct wireless_dev *wdev,
 		return ERR_PTR(-ENOMEM);
 
 	if (n_ssids)
-		request->ssids = (void *)request +
-			struct_size(request, channels, n_channels);
+		request->ssids = (void *)&request->channels[n_channels];
 	request->n_ssids = n_ssids;
 	if (ie_len) {
 		if (n_ssids)
@@ -10727,7 +10725,7 @@ static int nl80211_set_tx_bitrate_mask(struct sk_buff *skb,
 	if (!rdev->ops->set_bitrate_mask)
 		return -EOPNOTSUPP;
 
-	err = nl80211_parse_tx_bitrate_mask(info, &mask, true);
+	err = nl80211_parse_tx_bitrate_mask(info, &mask);
 	if (err)
 		return err;
 
@@ -11323,7 +11321,7 @@ static int nl80211_join_mesh(struct sk_buff *skb, struct genl_info *info)
 	}
 
 	if (info->attrs[NL80211_ATTR_TX_RATES]) {
-		err = nl80211_parse_tx_bitrate_mask(info, &setup.beacon_rate, false);
+		err = nl80211_parse_tx_bitrate_mask(info, &setup.beacon_rate);
 		if (err)
 			return err;
 
@@ -12245,8 +12243,6 @@ static int nl80211_set_coalesce(struct sk_buff *skb, struct genl_info *info)
 error:
 	for (i = 0; i < new_coalesce.n_rules; i++) {
 		tmp_rule = &new_coalesce.rules[i];
-		if (!tmp_rule)
-			continue;
 		for (j = 0; j < tmp_rule->n_patterns; j++)
 			kfree(tmp_rule->patterns[j].mask);
 		kfree(tmp_rule->patterns);

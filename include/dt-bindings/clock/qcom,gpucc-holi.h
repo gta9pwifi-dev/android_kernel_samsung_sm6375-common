@@ -27,7 +27,4 @@
 #define CX_GDSC							0
 #define GX_GDSC							1
 
-/* GPU_CC resets */
-#define GPU_CC_FREQUENCY_LIMITER_IRQ_CLEAR			0
-
 #endif

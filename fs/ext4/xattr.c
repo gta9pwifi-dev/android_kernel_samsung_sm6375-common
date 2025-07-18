@@ -420,7 +420,7 @@ static int ext4_xattr_inode_iget(struct inode *parent, unsigned long ea_ino,
 		ext4_set_inode_state(inode, EXT4_STATE_LUSTRE_EA_INODE);
 		ext4_xattr_inode_set_ref(inode, 1);
 	} else {
-		inode_lock_nested(inode, I_MUTEX_XATTR);
+		inode_lock(inode);
 		inode->i_flags |= S_NOQUOTA;
 		inode_unlock(inode);
 	}
@@ -1033,7 +1033,7 @@ static int ext4_xattr_inode_update_ref(handle_t *handle, struct inode *ea_inode,
 	s64 ref_count;
 	int ret;
 
-	inode_lock_nested(ea_inode, I_MUTEX_XATTR);
+	inode_lock(ea_inode);
 
 	ret = ext4_reserve_inode_write(handle, ea_inode, &iloc);
 	if (ret)
@@ -1396,12 +1396,6 @@ retry:
 			goto out;
 
 		memcpy(bh->b_data, buf, csize);
-		/*
-		 * Zero out block tail to avoid writing uninitialized memory
-		 * to disk.
-		 */
-		if (csize < blocksize)
-			memset(bh->b_data + csize, 0, blocksize - csize);
 		set_buffer_uptodate(bh);
 		ext4_handle_dirty_metadata(handle, ea_inode, bh);
 
@@ -1748,20 +1742,6 @@ static int ext4_xattr_set_entry(struct ext4_xattr_info *i,
 		memmove(here, (void *)here + size,
 			(void *)last - (void *)here + sizeof(__u32));
 		memset(last, 0, size);
-
-		/*
-		 * Update i_inline_off - moved ibody region might contain
-		 * system.data attribute.  Handling a failure here won't
-		 * cause other complications for setting an xattr.
-		 */
-		if (!is_block && ext4_has_inline_data(inode)) {
-			ret = ext4_find_inline_data_nolock(inode);
-			if (ret) {
-				ext4_warning_inode(inode,
-					"unable to update i_inline_off");
-				goto out;
-			}
-		}
 	} else if (s->not_found) {
 		/* Insert new name. */
 		size_t size = EXT4_XATTR_LEN(name_len);
@@ -3085,10 +3065,8 @@ ext4_xattr_block_cache_find(struct inode *inode,
 
 		bh = ext4_sb_bread(inode->i_sb, ce->e_value, REQ_PRIO);
 		if (IS_ERR(bh)) {
-			if (PTR_ERR(bh) == -ENOMEM) {
-				mb_cache_entry_put(ea_block_cache, ce);
+			if (PTR_ERR(bh) == -ENOMEM)
 				return NULL;
-			}
 			bh = NULL;
 			EXT4_ERROR_INODE(inode, "block %lu read error",
 					 (unsigned long)ce->e_value);

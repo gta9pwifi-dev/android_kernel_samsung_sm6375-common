@@ -886,8 +886,8 @@ struct amd_ir_data {
 	 */
 	struct irq_cfg *cfg;
 	int ga_vector;
-	u64 ga_root_ptr;
-	u32 ga_tag;
+	int ga_root_ptr;
+	int ga_tag;
 };
 
 struct amd_irte_ops {

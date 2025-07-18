@@ -275,8 +275,7 @@ void fib_release_info(struct fib_info *fi)
 				hlist_del(&nexthop_nh->nh_hash);
 			} endfor_nexthops(fi)
 		}
-		/* Paired with READ_ONCE() from fib_table_lookup() */
-		WRITE_ONCE(fi->fib_dead, 1);
+		fi->fib_dead = 1;
 		fib_info_put(fi);
 	}
 	spin_unlock_bh(&fib_info_lock);
@@ -1333,18 +1332,15 @@ __be32 fib_info_update_nhc_saddr(struct net *net, struct fib_nh_common *nhc,
 				 unsigned char scope)
 {
 	struct fib_nh *nh;
-	__be32 saddr;
 
 	if (nhc->nhc_family != AF_INET)
 		return inet_select_addr(nhc->nhc_dev, 0, scope);
 
 	nh = container_of(nhc, struct fib_nh, nh_common);
-	saddr = inet_select_addr(nh->fib_nh_dev, nh->fib_nh_gw4, scope);
+	nh->nh_saddr = inet_select_addr(nh->fib_nh_dev, nh->fib_nh_gw4, scope);
+	nh->nh_saddr_genid = atomic_read(&net->ipv4.dev_addr_genid);
 
-	WRITE_ONCE(nh->nh_saddr, saddr);
-	WRITE_ONCE(nh->nh_saddr_genid, atomic_read(&net->ipv4.dev_addr_genid));
-
-	return saddr;
+	return nh->nh_saddr;
 }
 
 __be32 fib_result_prefsrc(struct net *net, struct fib_result *res)
@@ -1358,9 +1354,8 @@ __be32 fib_result_prefsrc(struct net *net, struct fib_result *res)
 		struct fib_nh *nh;
 
 		nh = container_of(nhc, struct fib_nh, nh_common);
-		if (READ_ONCE(nh->nh_saddr_genid) ==
-		    atomic_read(&net->ipv4.dev_addr_genid))
-			return READ_ONCE(nh->nh_saddr);
+		if (nh->nh_saddr_genid == atomic_read(&net->ipv4.dev_addr_genid))
+			return nh->nh_saddr;
 	}
 
 	return fib_info_update_nhc_saddr(net, nhc, res->fi->fib_scope);
@@ -1591,7 +1586,6 @@ struct fib_info *fib_create_info(struct fib_config *cfg,
 link_it:
 	ofi = fib_find_info(fi);
 	if (ofi) {
-		/* fib_table_lookup() should not see @fi yet. */
 		fi->fib_dead = 1;
 		free_fib_info(fi);
 		ofi->fib_treeref++;
@@ -1629,7 +1623,6 @@ err_inval:
 
 failure:
 	if (fi) {
-		/* fib_table_lookup() should not see @fi yet. */
 		fi->fib_dead = 1;
 		free_fib_info(fi);
 	}

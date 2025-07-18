@@ -20,7 +20,6 @@ enum ep_pcie_link_status {
 	EP_PCIE_LINK_DISABLED,
 	EP_PCIE_LINK_UP,
 	EP_PCIE_LINK_ENABLED,
-	EP_PCIE_LINK_IN_L23READY,
 };
 
 enum ep_pcie_event {

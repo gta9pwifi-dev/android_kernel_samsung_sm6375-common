@@ -70,11 +70,7 @@ struct u64_stats_sync {
 
 
 #if BITS_PER_LONG == 32 && defined(CONFIG_SMP)
-#define u64_stats_init(syncp)				\
-	do {						\
-		struct u64_stats_sync *__s = (syncp);	\
-		seqcount_init(&__s->seq);		\
-	} while (0)
+#define u64_stats_init(syncp)	seqcount_init(&(syncp)->seq)
 #else
 static inline void u64_stats_init(struct u64_stats_sync *syncp)
 {

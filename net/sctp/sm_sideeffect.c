@@ -1240,10 +1240,7 @@ static int sctp_side_effects(enum sctp_event_type event_type,
 	default:
 		pr_err("impossible disposition %d in state %d, event_type %d, event_id %d\n",
 		       status, state, event_type, subtype.chunk);
-		error = status;
-		if (error >= 0)
-			error = -EINVAL;
-		WARN_ON_ONCE(1);
+		BUG();
 		break;
 	}
 

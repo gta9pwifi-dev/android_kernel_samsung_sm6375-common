@@ -86,7 +86,6 @@
 #include <linux/elf.h>
 #include <linux/pid_namespace.h>
 #include <linux/user_namespace.h>
-#include <linux/fs_parser.h>
 #include <linux/fs_struct.h>
 #include <linux/slab.h>
 #include <linux/sched/autogroup.h>
@@ -102,6 +101,10 @@
 
 #include "../../lib/kstrtox.h"
 
+#ifdef CONFIG_PAGE_BOOST
+#include <linux/delayacct.h>
+#endif
+
 /* NOTE:
  *	Implementing inode permission operations in /proc is almost
  *	certainly an error.  Permission checks need to happen during
@@ -114,40 +117,6 @@
 
 static u8 nlink_tid __ro_after_init;
 static u8 nlink_tgid __ro_after_init;
-
-enum proc_mem_force {
-	PROC_MEM_FORCE_ALWAYS,
-	PROC_MEM_FORCE_PTRACE,
-	PROC_MEM_FORCE_NEVER
-};
-
-static enum proc_mem_force proc_mem_force_override __ro_after_init =
-	IS_ENABLED(CONFIG_PROC_MEM_NO_FORCE) ? PROC_MEM_FORCE_NEVER :
-	IS_ENABLED(CONFIG_PROC_MEM_FORCE_PTRACE) ? PROC_MEM_FORCE_PTRACE :
-	PROC_MEM_FORCE_ALWAYS;
-
-static const struct constant_table proc_mem_force_table[] __initconst = {
-	{ "always", PROC_MEM_FORCE_ALWAYS },
-	{ "ptrace", PROC_MEM_FORCE_PTRACE },
-	{ "never", PROC_MEM_FORCE_NEVER },
-	{ }
-};
-
-static int __init early_proc_mem_force_override(char *buf)
-{
-	if (!buf)
-		return -EINVAL;
-
-	/*
-	 * lookup_constant() defaults to proc_mem_force_override to preseve
-	 * the initial Kconfig choice in case an invalid param gets passed.
-	 */
-	proc_mem_force_override = lookup_constant(proc_mem_force_table,
-						  buf, proc_mem_force_override);
-
-	return 0;
-}
-early_param("proc_mem.force_override", early_proc_mem_force_override);
 
 struct pid_entry {
 	const char *name;
@@ -499,6 +468,57 @@ static int proc_pid_stack(struct seq_file *m, struct pid_namespace *ns,
 	kfree(entries);
 
 	return err;
+}
+#endif
+
+#ifdef CONFIG_PAGE_BOOST
+static int proc_pid_ioinfo(struct seq_file *m, struct pid_namespace *ns,
+			      struct pid *pid, struct task_struct *task)
+{
+	struct task_io_accounting acct = task->ioac;
+	unsigned long flags;
+	int result;
+
+	result = mutex_lock_killable(&task->signal->cred_guard_mutex);
+	if (result)
+		return result;
+
+	if (!ptrace_may_access(task, PTRACE_MODE_READ_FSCREDS)) {
+		result = -EACCES;
+		goto out_unlock;
+	}
+
+	if (lock_task_sighand(task, &flags)) {
+		struct task_struct *t = task;
+
+		task_io_accounting_add(&acct, &task->signal->ioac);
+		while_each_thread(task, t)
+			task_io_accounting_add(&acct, &t->ioac);
+
+		unlock_task_sighand(task, &flags);
+	}
+
+	seq_printf(m,
+		   "%llu\n"
+		   "%llu\n"
+		   "%llu\n",
+#ifdef CONFIG_TASK_XACCT
+		   (unsigned long long)acct.rchar,
+#else
+		   (unsigned long long)0,
+#endif
+#ifdef CONFIG_TASK_IO_ACCOUNTING
+		   (unsigned long long)acct.read_bytes,
+#else
+		   (unsigned long long)0,
+#endif
+		   (unsigned long long)delayacct_blkio_nsecs(task));
+
+	result = 0;
+
+out_unlock:
+	mutex_unlock(&task->signal->cred_guard_mutex);
+	return result;
 }
 #endif
 
@@ -858,28 +878,6 @@ static int mem_open(struct inode *inode, struct file *file)
 	return ret;
 }
 
-static bool proc_mem_foll_force(struct file *file, struct mm_struct *mm)
-{
-	struct task_struct *task;
-	bool ptrace_active = false;
-
-	switch (proc_mem_force_override) {
-	case PROC_MEM_FORCE_NEVER:
-		return false;
-	case PROC_MEM_FORCE_PTRACE:
-		task = get_proc_task(file_inode(file));
-		if (task) {
-			ptrace_active =	READ_ONCE(task->ptrace) &&
-					READ_ONCE(task->mm) == mm &&
-					READ_ONCE(task->parent) == current;
-			put_task_struct(task);
-		}
-		return ptrace_active;
-	default:
-		return true;
-	}
-}
-
 static ssize_t mem_rw(struct file *file, char __user *buf,
 			size_t count, loff_t *ppos, int write)
 {
@@ -900,9 +898,7 @@ static ssize_t mem_rw(struct file *file, char __user *buf,
 	if (!mmget_not_zero(mm))
 		goto free;
 
-	flags = write ? FOLL_WRITE : 0;
-	if (proc_mem_foll_force(file, mm))
-		flags |= FOLL_FORCE;
+	flags = FOLL_FORCE | (write ? FOLL_WRITE : 0);
 
 	while (count > 0) {
 		size_t this_len = min_t(size_t, count, PAGE_SIZE);
@@ -3363,6 +3359,13 @@ static const struct pid_entry tgid_base_stuff[] = {
 	ONE("stat",       S_IRUGO, proc_tgid_stat),
 	ONE("statm",      S_IRUGO, proc_pid_statm),
 	REG("maps",       S_IRUGO, proc_pid_maps_operations),
+#ifdef CONFIG_PAGE_BOOST
+	REG("filemap_list",       S_IRUGO, proc_pid_filemap_list_operations),
+	ONE("ioinfo",  S_IRUGO, proc_pid_ioinfo),
+#ifdef CONFIG_PAGE_BOOST_RECORDING
+	REG("io_record_control",      S_IRUGO|S_IWUGO, proc_pid_io_record_operations),
+#endif
+#endif
 #ifdef CONFIG_NUMA
 	REG("numa_maps",  S_IRUGO, proc_pid_numa_maps_operations),
 #endif
@@ -3740,8 +3743,7 @@ static int proc_tid_comm_permission(struct inode *inode, int mask)
 }
 
 static const struct inode_operations proc_tid_comm_inode_operations = {
-		.setattr	= proc_setattr,
-		.permission	= proc_tid_comm_permission,
+		.permission = proc_tid_comm_permission,
 };
 
 /*

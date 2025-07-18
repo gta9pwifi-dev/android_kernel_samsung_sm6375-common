@@ -309,7 +309,7 @@ static int st_start_io(struct path_selector *ps, struct dm_path *path,
 }
 
 static int st_end_io(struct path_selector *ps, struct dm_path *path,
-		     size_t nr_bytes, u64 start_time)
+		     size_t nr_bytes)
 {
 	struct path_info *pi = path->pscontext;
 

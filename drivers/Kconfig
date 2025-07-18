@@ -230,4 +230,10 @@ source "drivers/interconnect/Kconfig"
 
 source "drivers/counter/Kconfig"
 
+# P86801AA1-3673, zhangbin02.wt, add, 2023.05.05, grdm bringup
+source "drivers/guardianm/Kconfig"
+# P86801AA1-3866 , yexiaojun.wt, add, 20230706,  add wakeup reason
+source "drivers/wt_sys/Kconfig"
+source "drivers/samsung/Kconfig"
+
 endmenu

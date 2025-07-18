@@ -230,9 +230,6 @@ static void *trie_lookup_elem(struct bpf_map *map, void *_key)
 	struct lpm_trie_node *node, *found = NULL;
 	struct bpf_lpm_trie_key *key = _key;
 
-	if (key->prefixlen > trie->max_prefixlen)
-		return NULL;
-
 	/* Start walking the trie from the root node ... */
 
 	for (node = rcu_dereference(trie->root); node;) {
@@ -364,10 +361,6 @@ static int trie_update_elem(struct bpf_map *map,
 	 * simply assign the @new_node to that slot and be done.
 	 */
 	if (!node) {
-		if (flags == BPF_EXIST) {
-			ret = -ENOENT;
-			goto out;
-		}
 		rcu_assign_pointer(*slot, new_node);
 		goto out;
 	}
@@ -376,28 +369,15 @@ static int trie_update_elem(struct bpf_map *map,
 	 * which already has the correct data array set.
 	 */
 	if (node->prefixlen == matchlen) {
-		if (!(node->flags & LPM_TREE_NODE_FLAG_IM)) {
-			if (flags == BPF_NOEXIST) {
-				ret = -EEXIST;
-				goto out;
-			}
-			trie->n_entries--;
-		} else if (flags == BPF_EXIST) {
-			ret = -ENOENT;
-			goto out;
-		}
-
 		new_node->child[0] = node->child[0];
 		new_node->child[1] = node->child[1];
+
+		if (!(node->flags & LPM_TREE_NODE_FLAG_IM))
+			trie->n_entries--;
 
 		rcu_assign_pointer(*slot, new_node);
 		kfree_rcu(node, rcu);
 
-		goto out;
-	}
-
-	if (flags == BPF_EXIST) {
-		ret = -ENOENT;
 		goto out;
 	}
 
@@ -655,7 +635,7 @@ static int trie_get_next_key(struct bpf_map *map, void *_key, void *_next_key)
 	struct lpm_trie_node **node_stack = NULL;
 	int err = 0, stack_ptr = -1;
 	unsigned int next_bit;
-	size_t matchlen = 0;
+	size_t matchlen;
 
 	/* The get_next_key follows postorder. For the 4 node example in
 	 * the top of this file, the trie_get_next_key() returns the following
@@ -677,7 +657,7 @@ static int trie_get_next_key(struct bpf_map *map, void *_key, void *_next_key)
 	if (!key || key->prefixlen > trie->max_prefixlen)
 		goto find_leftmost;
 
-	node_stack = kmalloc_array(trie->max_prefixlen + 1,
+	node_stack = kmalloc_array(trie->max_prefixlen,
 				   sizeof(struct lpm_trie_node *),
 				   GFP_ATOMIC | __GFP_NOWARN);
 	if (!node_stack)
@@ -694,7 +674,7 @@ static int trie_get_next_key(struct bpf_map *map, void *_key, void *_next_key)
 		next_bit = extract_bit(key->data, node->prefixlen);
 		node = rcu_dereference(node->child[next_bit]);
 	}
-	if (!node || node->prefixlen != matchlen ||
+	if (!node || node->prefixlen != key->prefixlen ||
 	    (node->flags & LPM_TREE_NODE_FLAG_IM))
 		goto find_leftmost;
 

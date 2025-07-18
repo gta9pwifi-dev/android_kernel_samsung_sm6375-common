@@ -522,10 +522,8 @@ static ssize_t vcpudispatch_stats_write(struct file *file, const char __user *p,
 
 	if (cmd) {
 		rc = init_cpu_associativity();
-		if (rc) {
-			destroy_cpu_associativity();
+		if (rc)
 			goto out;
-		}
 
 		for_each_possible_cpu(cpu) {
 			disp = per_cpu_ptr(&vcpu_disp_data, cpu);
@@ -1871,10 +1869,10 @@ out:
  * h_get_mpp
  * H_GET_MPP hcall returns info in 7 parms
  */
-long h_get_mpp(struct hvcall_mpp_data *mpp_data)
+int h_get_mpp(struct hvcall_mpp_data *mpp_data)
 {
-	unsigned long retbuf[PLPAR_HCALL9_BUFSIZE] = {0};
-	long rc;
+	int rc;
+	unsigned long retbuf[PLPAR_HCALL9_BUFSIZE];
 
 	rc = plpar_hcall9(H_GET_MPP, retbuf);
 

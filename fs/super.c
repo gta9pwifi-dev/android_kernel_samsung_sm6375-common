@@ -475,8 +475,6 @@ void generic_shutdown_super(struct super_block *sb)
 	spin_unlock(&sb_lock);
 	up_write(&sb->s_umount);
 	if (sb->s_bdi != &noop_backing_dev_info) {
-		if (sb->s_iflags & SB_I_PERSB_BDI)
-			bdi_unregister(sb->s_bdi);
 		bdi_put(sb->s_bdi);
 		sb->s_bdi = &noop_backing_dev_info;
 	}
@@ -907,7 +905,6 @@ int reconfigure_super(struct fs_context *fc)
 	struct super_block *sb = fc->root->d_sb;
 	int retval;
 	bool remount_ro = false;
-	bool remount_rw = false;
 	bool force = fc->sb_flags & SB_FORCE;
 
 	if (fc->sb_flags_mask & ~MS_RMT_MASK)
@@ -924,7 +921,7 @@ int reconfigure_super(struct fs_context *fc)
 		if (!(fc->sb_flags & SB_RDONLY) && bdev_read_only(sb->s_bdev))
 			return -EACCES;
 #endif
-		remount_rw = !(fc->sb_flags & SB_RDONLY) && sb_rdonly(sb);
+
 		remount_ro = (fc->sb_flags & SB_RDONLY) && !sb_rdonly(sb);
 	}
 
@@ -954,14 +951,6 @@ int reconfigure_super(struct fs_context *fc)
 			if (retval)
 				return retval;
 		}
-	} else if (remount_rw) {
-		/*
-		 * We set s_readonly_remount here to protect filesystem's
-		 * reconfigure code from writes from userspace until
-		 * reconfigure finishes.
-		 */
-		sb->s_readonly_remount = 1;
-		smp_wmb();
 	}
 
 	if (fc->ops->reconfigure) {
@@ -1624,7 +1613,6 @@ int super_setup_bdi_name(struct super_block *sb, char *fmt, ...)
 	}
 	WARN_ON(sb->s_bdi != &noop_backing_dev_info);
 	sb->s_bdi = bdi;
-	sb->s_iflags |= SB_I_PERSB_BDI;
 
 	return 0;
 }

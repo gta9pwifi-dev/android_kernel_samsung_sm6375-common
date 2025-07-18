@@ -218,10 +218,10 @@ static inline void ufs_qcom_assert_reset(struct ufs_hba *hba)
 			1 << OFFSET_UFS_PHY_SOFT_RESET, REG_UFS_CFG1);
 
 	/*
-	 * Dummy read to ensure the write takes effect before doing any sort
-	 * of delay
+	 * Make sure assertion of ufs phy reset is written to
+	 * register before returning
 	 */
-	ufshcd_readl(hba, REG_UFS_CFG1);
+	mb();
 }
 
 static inline void ufs_qcom_deassert_reset(struct ufs_hba *hba)
@@ -230,10 +230,10 @@ static inline void ufs_qcom_deassert_reset(struct ufs_hba *hba)
 			0 << OFFSET_UFS_PHY_SOFT_RESET, REG_UFS_CFG1);
 
 	/*
-	 * Dummy read to ensure the write takes effect before doing any sort
-	 * of delay
+	 * Make sure de-assertion of ufs phy reset is written to
+	 * register before returning
 	 */
-	ufshcd_readl(hba, REG_UFS_CFG1);
+	mb();
 }
 
 struct ufs_qcom_bus_vote {
@@ -300,6 +300,19 @@ enum constraint {
 	QOS_PERF,
 	QOS_POWER,
 	QOS_MAX,
+};
+
+/*unique number*/
+#define UFS_UN_20_DIGITS 20
+#define UFS_UN_MAX_DIGITS 21 //current max digit + 1
+
+#define SERIAL_NUM_SIZE 7
+
+struct ufs_vendor_dev_info {
+	char unique_number[UFS_UN_MAX_DIGITS];
+	u8 lifetime;
+	unsigned int lc_info;
+	struct ufs_hba *hba;
 };
 
 struct ufs_qcom_host {
@@ -377,6 +390,7 @@ struct ufs_qcom_host {
 	struct ufs_qcom_qos_req *ufs_qos;
 	bool bypass_g4_cfgready;
 	bool is_dt_pm_level_read;
+	u64 transferred_bytes;
 };
 
 static inline u32

@@ -879,11 +879,13 @@ static ssize_t devkmsg_write(struct kiocb *iocb, struct iov_iter *from)
 	if (devkmsg_log & DEVKMSG_LOG_MASK_OFF)
 		return len;
 
+#ifdef WT_FINAL_RELEASE
 	/* Ratelimit when not explicitly enabled. */
 	if (!(devkmsg_log & DEVKMSG_LOG_MASK_ON)) {
 		if (!___ratelimit(&user->rs, current->comm))
 			return ret;
 	}
+#endif
 
 	buf = kmalloc(len+1, GFP_KERNEL);
 	if (buf == NULL)
@@ -1832,12 +1834,6 @@ static int console_trylock_spinning(void)
 	 * complain.
 	 */
 	mutex_acquire(&console_lock_dep_map, 0, 1, _THIS_IP_);
-
-	/*
-	 * Update @console_may_schedule for trylock because the previous
-	 * owner may have been schedulable.
-	 */
-	console_may_schedule = 0;
 
 	return 1;
 }

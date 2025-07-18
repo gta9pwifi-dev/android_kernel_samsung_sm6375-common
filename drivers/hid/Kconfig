@@ -169,6 +169,13 @@ config HID_AUREAL
 	---help---
 	Support for Aureal Cy se W-01RN Remote Controller and other Aureal derived remotes.
 
+config POGOPIN_HID
+	tristate "POGOPIN_HID support for kbd connect"
+	depends on HID
+	---help---
+	Support for keyboard connected.
+	If keyboard connect, setup HW buffers and start the device.
+
 config HID_BELKIN
 	tristate "Belkin Flip KVM and Wireless keyboard"
 	depends on HID

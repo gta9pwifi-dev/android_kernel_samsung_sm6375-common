@@ -315,8 +315,9 @@ static void addrconf_del_dad_work(struct inet6_ifaddr *ifp)
 static void addrconf_mod_rs_timer(struct inet6_dev *idev,
 				  unsigned long when)
 {
-	if (!mod_timer(&idev->rs_timer, jiffies + when))
+	if (!timer_pending(&idev->rs_timer))
 		in6_dev_hold(idev);
+	mod_timer(&idev->rs_timer, jiffies + when);
 }
 
 static void addrconf_mod_dad_work(struct inet6_ifaddr *ifp,
@@ -698,22 +699,6 @@ errout:
 	return err;
 }
 
-/* Combine dev_addr_genid and dev_base_seq to detect changes.
- */
-static u32 inet6_base_seq(const struct net *net)
-{
-	u32 res = atomic_read(&net->ipv6.dev_addr_genid) +
-		  net->dev_base_seq;
-
-	/* Must not return 0 (see nl_dump_check_consistent()).
-	 * Chose a value far away from 0.
-	 */
-	if (!res)
-		res = 0x80000000;
-	return res;
-}
-
-
 static int inet6_netconf_dump_devconf(struct sk_buff *skb,
 				      struct netlink_callback *cb)
 {
@@ -747,7 +732,8 @@ static int inet6_netconf_dump_devconf(struct sk_buff *skb,
 		idx = 0;
 		head = &net->dev_index_head[h];
 		rcu_read_lock();
-		cb->seq = inet6_base_seq(net);
+		cb->seq = atomic_read(&net->ipv6.dev_addr_genid) ^
+			  net->dev_base_seq;
 		hlist_for_each_entry_rcu(dev, head, index_hlist) {
 			if (idx < s_idx)
 				goto cont;
@@ -1384,7 +1370,7 @@ retry:
 	 * idev->desync_factor if it's larger
 	 */
 	cnf_temp_preferred_lft = READ_ONCE(idev->cnf.temp_prefered_lft);
-	max_desync_factor = min_t(long,
+	max_desync_factor = min_t(__u32,
 				  idev->cnf.max_desync_factor,
 				  cnf_temp_preferred_lft - regen_advance);
 
@@ -1831,8 +1817,7 @@ int ipv6_dev_get_saddr(struct net *net, const struct net_device *dst_dev,
 							    master, &dst,
 							    scores, hiscore_idx);
 
-			if (scores[hiscore_idx].ifa &&
-			    scores[hiscore_idx].scopedist >= 0)
+			if (scores[hiscore_idx].ifa)
 				goto out;
 		}
 
@@ -2029,10 +2014,9 @@ struct inet6_ifaddr *ipv6_get_ifaddr(struct net *net, const struct in6_addr *add
 		if (ipv6_addr_equal(&ifp->addr, addr)) {
 			if (!dev || ifp->idev->dev == dev ||
 			    !(ifp->scope&(IFA_LINK|IFA_HOST) || strict)) {
-				if (in6_ifa_hold_safe(ifp)) {
-					result = ifp;
-					break;
-				}
+				result = ifp;
+				in6_ifa_hold(ifp);
+				break;
 			}
 		}
 	}
@@ -2580,18 +2564,12 @@ static void manage_tempaddrs(struct inet6_dev *idev,
 			ipv6_ifa_notify(0, ift);
 	}
 
-	/* Also create a temporary address if it's enabled but no temporary
-	 * address currently exists.
-	 * However, we get called with valid_lft == 0, prefered_lft == 0, create == false
-	 * as part of cleanup (ie. deleting the mngtmpaddr).
-	 * We don't want that to result in creating a new temporary ip address.
-	 */
-	if (list_empty(&idev->tempaddr_list) && (valid_lft || prefered_lft))
-		create = true;
-
-	if (create && idev->cnf.use_tempaddr > 0) {
+	if ((create || list_empty(&idev->tempaddr_list)) &&
+	    idev->cnf.use_tempaddr > 0) {
 		/* When a new public address is created as described
 		 * in [ADDRCONF], also create a new temporary address.
+		 * Also create a temporary address if it's enabled but
+		 * no temporary address currently exists.
 		 */
 		read_unlock_bh(&idev->lock);
 		ipv6_create_tempaddr(ifp, NULL, false);
@@ -5271,7 +5249,7 @@ static int inet6_dump_addr(struct sk_buff *skb, struct netlink_callback *cb,
 	}
 
 	rcu_read_lock();
-	cb->seq = inet6_base_seq(tgt_net);
+	cb->seq = atomic_read(&tgt_net->ipv6.dev_addr_genid) ^ tgt_net->dev_base_seq;
 	for (h = s_h; h < NETDEV_HASHENTRIES; h++, s_idx = 0) {
 		idx = 0;
 		head = &tgt_net->dev_index_head[h];
@@ -5404,10 +5382,9 @@ static int inet6_rtm_getaddr(struct sk_buff *in_skb, struct nlmsghdr *nlh,
 	}
 
 	addr = extract_addr(tb[IFA_ADDRESS], tb[IFA_LOCAL], &peer);
-	if (!addr) {
-		err = -EINVAL;
-		goto errout;
-	}
+	if (!addr)
+		return -EINVAL;
+
 	ifm = nlmsg_data(nlh);
 	if (ifm->ifa_index)
 		dev = dev_get_by_index(tgt_net, ifm->ifa_index);
@@ -6017,7 +5994,11 @@ static int inet6_fill_prefix(struct sk_buff *skb, struct inet6_dev *idev,
 	pmsg->prefix_len = pinfo->prefix_len;
 	pmsg->prefix_type = pinfo->type;
 	pmsg->prefix_pad3 = 0;
-	pmsg->prefix_flags = pinfo->flags;
+	pmsg->prefix_flags = 0;
+	if (pinfo->onlink)
+		pmsg->prefix_flags |= IF_PREFIX_ONLINK;
+	if (pinfo->autoconf)
+		pmsg->prefix_flags |= IF_PREFIX_AUTOCONF;
 
 	if (nla_put(skb, PREFIX_ADDRESS, sizeof(pinfo->prefix), &pinfo->prefix))
 		goto nla_put_failure;

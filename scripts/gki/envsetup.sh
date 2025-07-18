@@ -34,8 +34,21 @@ else
 	QCOM_DEBUG_FS_FRAG=" "
 fi
 
-# Consolidate fragment may not be present for all platforms.
-QCOM_CONSOLIDATE_FRAG=`ls ${CONFIGS_DIR}/${PLATFORM_NAME}_consolidate.config 2> /dev/null`
+SEC_COMMON_FRAG=${CONFIGS_DIR}/wingtech_sec_defconfig
+SEC_GKI_COMMON_FRAG=${CONFIGS_DIR}/wingtech_sec_GKI_defconfig
+SEC_ENG_FRAG=${CONFIGS_DIR}/wingtech_sec_eng_defconfig
+SEC_USERDEBUG_FRAG=${CONFIGS_DIR}/wingtech_sec_userdebug_defconfig
+
+echo "Samsung kernel envsetup $SEC_COMMON_FRAG"
+echo "Samsung kernel envsetup $SEC_GKI_COMMON_FRAG"
+echo "Samsung kernel envsetup $SEC_ENG_FRAG"
+echo "Samsung kernel envsetup $SEC_USERDEBUG_FRAG"
+
+# SS Kbuild : Skip below cmd at SS Kbuild.
+if [[ -z "${XBUILD_KERNEL_DIR}" ]]; then
+  # Consolidate fragment may not be present for all platforms.
+  QCOM_CONSOLIDATE_FRAG=`ls ${CONFIGS_DIR}/${PLATFORM_NAME}_consolidate.config 2> /dev/null`
+fi
 
 QCOM_GENERIC_PERF_FRAG=${CONFIGS_DIR}/${PLATFORM_NAME}.config
 QCOM_GENERIC_DEBUG_FRAG=${CONFIGS_DIR}/${PLATFORM_NAME}-debug.config

@@ -468,4 +468,10 @@ config BACKLIGHT_RAVE_SP
 
 endif # BACKLIGHT_CLASS_DEVICE
 
+config LCD_BIAS_OCP2138
+	tristate "Enable OCP2138 driver"
+	depends on I2C
+	help
+	define ocp2138 driver config to enable ocp2138 driver.
+
 endmenu

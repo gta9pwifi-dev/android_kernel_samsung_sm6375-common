@@ -488,6 +488,7 @@ struct thread_struct {
 
 	mm_segment_t		addr_limit;
 
+	unsigned int		sig_on_uaccess_err:1;
 	unsigned int		uaccess_err:1;	/* uaccess failed */
 
 	/* Floating point and extended processor state */
@@ -974,7 +975,5 @@ enum taa_mitigations {
 	TAA_MITIGATION_VERW,
 	TAA_MITIGATION_TSX_DISABLED,
 };
-
-extern bool gds_ucode_mitigated(void);
 
 #endif /* _ASM_X86_PROCESSOR_H */

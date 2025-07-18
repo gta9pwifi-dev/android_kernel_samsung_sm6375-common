@@ -7,7 +7,6 @@
 #include <linux/swapops.h>
 #include <linux/kmemleak.h>
 #include <linux/sched/task.h>
-#include <linux/sched/mm.h>
 
 #include <asm/set_memory.h>
 #include <asm/cpu_device_id.h>
@@ -27,7 +26,6 @@
 #include <asm/cpufeature.h>
 #include <asm/pti.h>
 #include <asm/text-patching.h>
-#include <asm/paravirt.h>
 
 /*
  * We need to define the tracepoints somewhere, and tlb.c
@@ -737,11 +735,8 @@ void __init poking_init(void)
 	spinlock_t *ptl;
 	pte_t *ptep;
 
-	poking_mm = mm_alloc();
+	poking_mm = copy_init_mm();
 	BUG_ON(!poking_mm);
-
-	/* Xen PV guests need the PGD to be pinned. */
-	paravirt_arch_dup_mmap(NULL, poking_mm);
 
 	/*
 	 * Randomize the poking address, but make sure that the following page

@@ -173,7 +173,7 @@ static int __kstrncpy(char **dst, const char *name, size_t count, gfp_t gfp)
 {
 	*dst = kstrndup(name, count, gfp);
 	if (!*dst)
-		return -ENOMEM;
+		return -ENOSPC;
 	return count;
 }
 
@@ -301,26 +301,16 @@ static ssize_t config_test_show_str(char *dst,
 	return len;
 }
 
-static inline int __test_dev_config_update_bool(const char *buf, size_t size,
-						bool *cfg)
-{
-	int ret;
-
-	if (strtobool(buf, cfg) < 0)
-		ret = -EINVAL;
-	else
-		ret = size;
-
-	return ret;
-}
-
 static int test_dev_config_update_bool(const char *buf, size_t size,
 				       bool *cfg)
 {
 	int ret;
 
 	mutex_lock(&test_fw_mutex);
-	ret = __test_dev_config_update_bool(buf, size, cfg);
+	if (strtobool(buf, cfg) < 0)
+		ret = -EINVAL;
+	else
+		ret = size;
 	mutex_unlock(&test_fw_mutex);
 
 	return ret;
@@ -350,7 +340,7 @@ static ssize_t test_dev_config_show_int(char *buf, int cfg)
 	return snprintf(buf, PAGE_SIZE, "%d\n", val);
 }
 
-static inline int __test_dev_config_update_u8(const char *buf, size_t size, u8 *cfg)
+static int test_dev_config_update_u8(const char *buf, size_t size, u8 *cfg)
 {
 	int ret;
 	long new;
@@ -362,21 +352,12 @@ static inline int __test_dev_config_update_u8(const char *buf, size_t size, u8 *
 	if (new > U8_MAX)
 		return -EINVAL;
 
+	mutex_lock(&test_fw_mutex);
 	*(u8 *)cfg = new;
+	mutex_unlock(&test_fw_mutex);
 
 	/* Always return full write size even if we didn't consume all */
 	return size;
-}
-
-static int test_dev_config_update_u8(const char *buf, size_t size, u8 *cfg)
-{
-	int ret;
-
-	mutex_lock(&test_fw_mutex);
-	ret = __test_dev_config_update_u8(buf, size, cfg);
-	mutex_unlock(&test_fw_mutex);
-
-	return ret;
 }
 
 static ssize_t test_dev_config_show_u8(char *buf, u8 cfg)
@@ -411,10 +392,10 @@ static ssize_t config_num_requests_store(struct device *dev,
 		mutex_unlock(&test_fw_mutex);
 		goto out;
 	}
-
-	rc = __test_dev_config_update_u8(buf, count,
-					 &test_fw_config->num_requests);
 	mutex_unlock(&test_fw_mutex);
+
+	rc = test_dev_config_update_u8(buf, count,
+				       &test_fw_config->num_requests);
 
 out:
 	return rc;
@@ -509,7 +490,7 @@ static ssize_t trigger_request_store(struct device *dev,
 
 	name = kstrndup(buf, count, GFP_KERNEL);
 	if (!name)
-		return -ENOMEM;
+		return -ENOSPC;
 
 	pr_info("loading '%s'\n", name);
 
@@ -552,7 +533,7 @@ static ssize_t trigger_async_request_store(struct device *dev,
 
 	name = kstrndup(buf, count, GFP_KERNEL);
 	if (!name)
-		return -ENOMEM;
+		return -ENOSPC;
 
 	pr_info("loading '%s'\n", name);
 
@@ -597,7 +578,7 @@ static ssize_t trigger_custom_fallback_store(struct device *dev,
 
 	name = kstrndup(buf, count, GFP_KERNEL);
 	if (!name)
-		return -ENOMEM;
+		return -ENOSPC;
 
 	pr_info("loading '%s' using custom fallback mechanism\n", name);
 
@@ -648,7 +629,7 @@ static int test_fw_run_batch_request(void *data)
 
 		test_buf = kzalloc(TEST_FIRMWARE_BUF_SIZE, GFP_KERNEL);
 		if (!test_buf)
-			return -ENOMEM;
+			return -ENOSPC;
 
 		req->rc = request_firmware_into_buf(&req->fw,
 						    req->name,

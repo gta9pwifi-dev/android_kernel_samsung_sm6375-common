@@ -149,12 +149,9 @@ static int usb_string_copy(const char *s, char **s_copy)
 	int ret;
 	char *str;
 	char *copy = *s_copy;
-
 	ret = strlen(s);
 	if (ret > USB_MAX_STRING_LEN)
 		return -EOVERFLOW;
-	if (ret < 1)
-		return -EINVAL;
 
 	if (copy) {
 		str = copy;
@@ -1508,6 +1505,12 @@ err_comp_cleanup:
 	return ret;
 }
 
+//+P86801AA1-13020     xiejiaming, 202330912, add, to optimized AFC/USB/FLOAT type identify
+#ifdef CONFIG_QGKI_BUILD
+extern void wtchg_set_usb_connect(int connect);
+#endif
+//-P86801AA1-13020     xiejiaming, 202330912, add, to optimized AFC/USB/FLOAT type identify
+
 #ifdef CONFIG_USB_CONFIGFS_UEVENT
 static void android_work(struct work_struct *data)
 {
@@ -1551,6 +1554,16 @@ static void android_work(struct work_struct *data)
 		pr_info("%s: sent uevent %s\n", __func__, disconnected[0]);
 		uevent_sent = true;
 	}
+
+//+P86801AA1-13020     xiejiaming, 202330912, add, to optimized AFC/USB/FLOAT type identify
+#ifdef CONFIG_QGKI_BUILD
+	if (uevent_sent) {
+		wtchg_set_usb_connect(true);
+	} else {
+		wtchg_set_usb_connect(false);
+	}
+#endif
+//-P86801AA1-13020     xiejiaming, 202330912, add, to optimized AFC/USB/FLOAT type identify
 
 	if (!uevent_sent) {
 		pr_info("%s: did not send uevent (%d %d %p)\n", __func__,
@@ -1694,6 +1707,12 @@ static void configfs_composite_disconnect(struct usb_gadget *gadget)
 	spin_unlock_irqrestore(&gi->spinlock, flags);
 }
 
+/*+ P86801AA1-13544, gudi1@wt, add 20231017, usb if*/
+#if 0//def CONFIG_QGKI_BUILD
+extern void wtchg_turn_on_hiz(void);
+extern void wtchg_turn_off_hiz(void);
+#endif
+/*- P86801AA1-13544, gudi1@wt, add 20231017, usb if*/
 static void configfs_composite_suspend(struct usb_gadget *gadget)
 {
 	struct usb_composite_dev *cdev;
@@ -1714,6 +1733,11 @@ static void configfs_composite_suspend(struct usb_gadget *gadget)
 
 	composite_suspend(gadget);
 	spin_unlock_irqrestore(&gi->spinlock, flags);
+/*+ P86801AA1-13544, gudi1@wt, add 20231017, usb if*/
+	#if 0 //def CONFIG_QGKI_BUILD
+	wtchg_turn_on_hiz();
+	#endif //CONFIG_QGKI_BUILD
+/*- P86801AA1-13544, gudi1@wt, add 20231017, usb if*/
 }
 
 static void configfs_composite_resume(struct usb_gadget *gadget)
@@ -1736,6 +1760,11 @@ static void configfs_composite_resume(struct usb_gadget *gadget)
 
 	composite_resume(gadget);
 	spin_unlock_irqrestore(&gi->spinlock, flags);
+/*+ P86801AA1-13544, gudi1@wt, add 20231017, usb if*/
+	#if 0 //def CONFIG_QGKI_BUILD
+	wtchg_turn_off_hiz();
+	#endif //CONFIG_QGKI_BUILD
+/*- P86801AA1-13544, gudi1@wt, add 20231017, usb if*/
 }
 
 static const struct usb_gadget_driver configfs_driver_template = {

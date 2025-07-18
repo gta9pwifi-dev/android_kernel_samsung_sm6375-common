@@ -98,14 +98,12 @@ static struct hv_util_service util_heartbeat = {
 static struct hv_util_service util_kvp = {
 	.util_cb = hv_kvp_onchannelcallback,
 	.util_init = hv_kvp_init,
-	.util_init_transport = hv_kvp_init_transport,
 	.util_deinit = hv_kvp_deinit,
 };
 
 static struct hv_util_service util_vss = {
 	.util_cb = hv_vss_onchannelcallback,
 	.util_init = hv_vss_init,
-	.util_init_transport = hv_vss_init_transport,
 	.util_deinit = hv_vss_deinit,
 };
 
@@ -285,23 +283,10 @@ static void timesync_onchannelcallback(void *context)
 	struct ictimesync_ref_data *refdata;
 	u8 *time_txf_buf = util_timesynch.recv_buffer;
 
-	/*
-	 * Drain the ring buffer and use the last packet to update
-	 * host_ts
-	 */
-	while (1) {
-		int ret = vmbus_recvpacket(channel, time_txf_buf,
-					   HV_HYP_PAGE_SIZE, &recvlen,
-					   &requestid);
-		if (ret) {
-			pr_warn_once("TimeSync IC pkt recv failed (Err: %d)\n",
-				     ret);
-			break;
-		}
+	vmbus_recvpacket(channel, time_txf_buf,
+			 PAGE_SIZE, &recvlen, &requestid);
 
-		if (!recvlen)
-			break;
-
+	if (recvlen > 0) {
 		icmsghdrp = (struct icmsg_hdr *)&time_txf_buf[
 				sizeof(struct vmbuspipe_hdr)];
 
@@ -433,13 +418,6 @@ static int util_probe(struct hv_device *dev,
 	if (ret)
 		goto error;
 
-	if (srv->util_init_transport) {
-		ret = srv->util_init_transport();
-		if (ret) {
-			vmbus_close(dev->channel);
-			goto error;
-		}
-	}
 	return 0;
 
 error:

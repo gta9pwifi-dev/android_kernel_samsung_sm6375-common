@@ -187,6 +187,13 @@ config ARCH_QCOM
 	help
 	  This enables support for the ARMv8 based Qualcomm chipsets.
 
+#+ P86801EA1-1206 gudi1.wt,add.20231007,modify quiet thermal
+config AMERICA_VERSION
+	bool "S86801EA1"
+	help
+	  This enables support for S86801AA1 CHG.
+#- P86801EA1-1206 gudi1.wt,add.20231007,modify quiet thermal
+
 config ARCH_LAHAINA
 	bool "Enable Support for Qualcomm Technologies, Inc. LAHAINA"
 	depends on ARCH_QCOM

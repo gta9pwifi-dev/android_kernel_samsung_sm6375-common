@@ -2,6 +2,10 @@
 # ==========================================================================
 # Building
 # ==========================================================================
+# +P86801AA1-1797,wangkangmin.wt,ADD,20230626, add for gki build
+KBUILD_SYMTYPES := true
+KBUILD_PRESERVE := true
+# -P86801AA1-1797,wangkangmin.wt,ADD,20230626, add for gki build
 
 src := $(obj)
 

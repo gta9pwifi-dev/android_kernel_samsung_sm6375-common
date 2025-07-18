@@ -929,10 +929,11 @@ static unsigned int s3c24xx_serial_tx_empty(struct uart_port *port)
 		if ((ufstat & info->tx_fifomask) != 0 ||
 		    (ufstat & info->tx_fifofull))
 			return 0;
-		return TIOCSER_TEMT;
+
+		return 1;
 	}
 
-	return s3c24xx_serial_txempty_nofifo(port) ? TIOCSER_TEMT : 0;
+	return s3c24xx_serial_txempty_nofifo(port);
 }
 
 /* no modem control lines */
@@ -1319,12 +1320,8 @@ static unsigned int s3c24xx_serial_getclk(struct s3c24xx_uart_port *ourport,
 			continue;
 
 		rate = clk_get_rate(clk);
-		if (!rate) {
-			dev_err(ourport->port.dev,
-				"Failed to get clock rate for %s.\n", clkname);
-			clk_put(clk);
+		if (!rate)
 			continue;
-		}
 
 		if (ourport->info->has_divslot) {
 			unsigned long div = rate / req_baud;
@@ -1350,18 +1347,10 @@ static unsigned int s3c24xx_serial_getclk(struct s3c24xx_uart_port *ourport,
 			calc_deviation = -calc_deviation;
 
 		if (calc_deviation < deviation) {
-			/*
-			 * If we find a better clk, release the previous one, if
-			 * any.
-			 */
-			if (!IS_ERR(*best_clk))
-				clk_put(*best_clk);
 			*best_clk = clk;
 			best_quot = quot;
 			*clk_num = cnt;
 			deviation = calc_deviation;
-		} else {
-			clk_put(clk);
 		}
 	}
 

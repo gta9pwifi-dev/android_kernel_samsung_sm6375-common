@@ -160,12 +160,8 @@ static int bearer_name_validate(const char *name,
 
 	/* return bearer name components, if necessary */
 	if (name_parts) {
-		if (strscpy(name_parts->media_name, media_name,
-			    TIPC_MAX_MEDIA_NAME) < 0)
-			return 0;
-		if (strscpy(name_parts->if_name, if_name,
-			    TIPC_MAX_IF_NAME) < 0)
-			return 0;
+		strcpy(name_parts->media_name, media_name);
+		strcpy(name_parts->if_name, if_name);
 	}
 	return 1;
 }
@@ -334,7 +330,6 @@ static int tipc_enable_bearer(struct net *net, const char *name,
 	b->net_plane = bearer_id + 'A';
 	b->priority = prio;
 	test_and_set_bit_lock(0, &b->up);
-	refcount_set(&b->refcnt, 1);
 
 	res = tipc_disc_create(net, b, &b->bcast_addr, &skb);
 	if (res) {
@@ -372,17 +367,6 @@ static int tipc_reset_bearer(struct net *net, struct tipc_bearer *b)
 	return 0;
 }
 
-bool tipc_bearer_hold(struct tipc_bearer *b)
-{
-	return (b && refcount_inc_not_zero(&b->refcnt));
-}
-
-void tipc_bearer_put(struct tipc_bearer *b)
-{
-	if (b && refcount_dec_and_test(&b->refcnt))
-		kfree_rcu(b, rcu);
-}
-
 /**
  * bearer_disable
  *
@@ -401,7 +385,7 @@ static void bearer_disable(struct net *net, struct tipc_bearer *b)
 	if (b->disc)
 		tipc_disc_delete(b->disc);
 	RCU_INIT_POINTER(tn->bearer_list[bearer_id], NULL);
-	tipc_bearer_put(b);
+	kfree_rcu(b, rcu);
 	tipc_mon_delete(net, bearer_id);
 }
 
@@ -1041,12 +1025,6 @@ int tipc_nl_bearer_add(struct sk_buff *skb, struct genl_info *info)
 
 #ifdef CONFIG_TIPC_MEDIA_UDP
 	if (attrs[TIPC_NLA_BEARER_UDP_OPTS]) {
-		if (b->media->type_id != TIPC_MEDIA_TYPE_UDP) {
-			rtnl_unlock();
-			NL_SET_ERR_MSG(info->extack, "UDP option is unsupported");
-			return -EINVAL;
-		}
-
 		err = tipc_udp_nl_bearer_add(b,
 					     attrs[TIPC_NLA_BEARER_UDP_OPTS]);
 		if (err) {

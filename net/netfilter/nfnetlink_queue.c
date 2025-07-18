@@ -167,9 +167,7 @@ instance_destroy_rcu(struct rcu_head *head)
 	struct nfqnl_instance *inst = container_of(head, struct nfqnl_instance,
 						   rcu);
 
-	rcu_read_lock();
 	nfqnl_flush(inst, NULL, 0);
-	rcu_read_unlock();
 	kfree(inst);
 	module_put(THIS_MODULE);
 }
@@ -385,6 +383,7 @@ nfqnl_build_packet_message(struct net *net, struct nfqnl_instance *queue,
 	struct nlattr *nla;
 	struct nfqnl_msg_packet_hdr *pmsg;
 	struct nlmsghdr *nlh;
+	struct nfgenmsg *nfmsg;
 	struct sk_buff *entskb = entry->skb;
 	struct net_device *indev;
 	struct net_device *outdev;
@@ -470,15 +469,18 @@ nfqnl_build_packet_message(struct net *net, struct nfqnl_instance *queue,
 		goto nlmsg_failure;
 	}
 
-	nlh = nfnl_msg_put(skb, 0, 0,
-			   nfnl_msg_type(NFNL_SUBSYS_QUEUE, NFQNL_MSG_PACKET),
-			   0, entry->state.pf, NFNETLINK_V0,
-			   htons(queue->queue_num));
+	nlh = nlmsg_put(skb, 0, 0,
+			nfnl_msg_type(NFNL_SUBSYS_QUEUE, NFQNL_MSG_PACKET),
+			sizeof(struct nfgenmsg), 0);
 	if (!nlh) {
 		skb_tx_error(entskb);
 		kfree_skb(skb);
 		goto nlmsg_failure;
 	}
+	nfmsg = nlmsg_data(nlh);
+	nfmsg->nfgen_family = entry->state.pf;
+	nfmsg->version = NFNETLINK_V0;
+	nfmsg->res_id = htons(queue->queue_num);
 
 	nla = __nla_reserve(skb, NFQA_PACKET_HDR, sizeof(*pmsg));
 	pmsg = nla_data(nla);

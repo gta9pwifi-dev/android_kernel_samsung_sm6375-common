@@ -132,16 +132,10 @@ int bcmgenet_wol_power_down_cfg(struct bcmgenet_priv *priv,
 		return -EINVAL;
 	}
 
-	/* Can't suspend with WoL if MAC is still in reset */
-	spin_lock_bh(&priv->reg_lock);
-	reg = bcmgenet_umac_readl(priv, UMAC_CMD);
-	if (reg & CMD_SW_RESET)
-		reg &= ~CMD_SW_RESET;
-
 	/* disable RX */
+	reg = bcmgenet_umac_readl(priv, UMAC_CMD);
 	reg &= ~CMD_RX_EN;
 	bcmgenet_umac_writel(priv, reg, UMAC_CMD);
-	spin_unlock_bh(&priv->reg_lock);
 	mdelay(10);
 
 	reg = bcmgenet_umac_readl(priv, UMAC_MPD_CTRL);
@@ -165,7 +159,6 @@ int bcmgenet_wol_power_down_cfg(struct bcmgenet_priv *priv,
 		  retries);
 
 	/* Enable CRC forward */
-	spin_lock_bh(&priv->reg_lock);
 	reg = bcmgenet_umac_readl(priv, UMAC_CMD);
 	priv->crc_fwd_en = 1;
 	reg |= CMD_CRC_FWD;
@@ -173,7 +166,6 @@ int bcmgenet_wol_power_down_cfg(struct bcmgenet_priv *priv,
 	/* Receiver must be enabled for WOL MP detection */
 	reg |= CMD_RX_EN;
 	bcmgenet_umac_writel(priv, reg, UMAC_CMD);
-	spin_unlock_bh(&priv->reg_lock);
 
 	return 0;
 }
@@ -195,10 +187,8 @@ void bcmgenet_wol_power_up_cfg(struct bcmgenet_priv *priv,
 	bcmgenet_umac_writel(priv, reg, UMAC_MPD_CTRL);
 
 	/* Disable CRC Forward */
-	spin_lock_bh(&priv->reg_lock);
 	reg = bcmgenet_umac_readl(priv, UMAC_CMD);
 	reg &= ~CMD_CRC_FWD;
 	bcmgenet_umac_writel(priv, reg, UMAC_CMD);
-	spin_unlock_bh(&priv->reg_lock);
 	priv->crc_fwd_en = 0;
 }

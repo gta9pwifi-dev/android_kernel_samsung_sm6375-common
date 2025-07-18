@@ -28,7 +28,6 @@
 #include <asm/desc.h>
 #include <asm/pgtable.h>
 #include <asm/cpu.h>
-#include <asm/fpu/internal.h>
 
 #include <xen/interface/xen.h>
 #include <xen/interface/vcpu.h>
@@ -62,7 +61,6 @@ static void cpu_bringup(void)
 
 	cr4_init();
 	cpu_init();
-	fpu__init_cpu();
 	touch_softlockup_watchdog();
 	preempt_disable();
 

@@ -670,6 +670,16 @@ found:
 			 */
 			ext4_clear_inode_state(inode, EXT4_STATE_EXT_MIGRATE);
 		}
+
+		/*
+		 * Update reserved blocks/metadata blocks after successful
+		 * block allocation which had been deferred till now. We don't
+		 * support fallocate for non extent files. So we can update
+		 * reserve space here.
+		 */
+		if ((retval > 0) &&
+			(flags & EXT4_GET_BLOCKS_DELALLOC_RESERVE))
+			ext4_da_update_reserve_space(inode, retval, 1);
 	}
 
 	if (retval > 0) {
@@ -5629,9 +5639,8 @@ static void ext4_wait_for_tail_page_commit(struct inode *inode)
 	struct page *page;
 	unsigned offset;
 	journal_t *journal = EXT4_SB(inode->i_sb)->s_journal;
-	tid_t commit_tid;
+	tid_t commit_tid = 0;
 	int ret;
-	bool has_transaction;
 
 	offset = inode->i_size & (PAGE_SIZE - 1);
 	/*
@@ -5656,14 +5665,12 @@ static void ext4_wait_for_tail_page_commit(struct inode *inode)
 		put_page(page);
 		if (ret != -EBUSY)
 			return;
-		has_transaction = false;
+		commit_tid = 0;
 		read_lock(&journal->j_state_lock);
-		if (journal->j_committing_transaction) {
+		if (journal->j_committing_transaction)
 			commit_tid = journal->j_committing_transaction->t_tid;
-			has_transaction = true;
-		}
 		read_unlock(&journal->j_state_lock);
-		if (has_transaction)
+		if (commit_tid)
 			jbd2_log_wait_commit(journal, commit_tid);
 	}
 }

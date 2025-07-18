@@ -274,9 +274,10 @@ int __rtc_read_alarm(struct rtc_device *rtc, struct rtc_wkalrm *alarm)
 			return err;
 
 		/* full-function RTCs won't have such missing fields */
-		err = rtc_valid_tm(&alarm->time);
-		if (!err)
-			goto done;
+		if (rtc_valid_tm(&alarm->time) == 0) {
+			rtc_add_offset(rtc, &alarm->time);
+			return 0;
+		}
 
 		/* get the "after" timestamp, to detect wrapped fields */
 		err = rtc_read_time(rtc, &now);
@@ -378,8 +379,6 @@ done:
 	if (err)
 		dev_warn(&rtc->dev, "invalid alarm value: %ptR\n",
 			 &alarm->time);
-	else
-		rtc_add_offset(rtc, &alarm->time);
 
 	return err;
 }
@@ -524,6 +523,42 @@ int rtc_initialize_alarm(struct rtc_device *rtc, struct rtc_wkalrm *alarm)
 	return err;
 }
 EXPORT_SYMBOL_GPL(rtc_initialize_alarm);
+
+#if IS_ENABLED(CONFIG_RTC_AUTO_PWRON)
+int rtc_set_bootalarm(struct rtc_device *rtc, struct rtc_wkalrm *alarm)
+{
+	int err;
+
+	if (!rtc->ops) {
+		dev_err(&rtc->dev, "ops not exist\n");
+		err = -ENODEV;
+	} else if (!rtc->ops->set_bootalarm) {
+		dev_err(&rtc->dev, "bootalarm func not exist\n");
+		err = -EINVAL;
+	} else
+		err = rtc->ops->set_bootalarm(rtc->dev.parent, alarm);
+
+	return err;
+}
+EXPORT_SYMBOL_GPL(rtc_set_bootalarm);
+
+int rtc_get_bootalarm(struct rtc_device *rtc, struct rtc_wkalrm *alarm)
+{
+	int err;
+
+	if (!rtc->ops) {
+		dev_err(&rtc->dev, "ops not exist\n");
+		err = -ENODEV;
+	} else if (!rtc->ops->read_bootalarm) {
+		dev_err(&rtc->dev, "bootalarm func not exist\n");
+		err = -EINVAL;
+	} else
+		err = rtc->ops->read_bootalarm(rtc->dev.parent, alarm);
+
+	return err;
+}
+EXPORT_SYMBOL_GPL(rtc_get_bootalarm);
+#endif
 
 int rtc_alarm_irq_enable(struct rtc_device *rtc, unsigned int enabled)
 {
@@ -897,18 +932,13 @@ void rtc_timer_do_work(struct work_struct *work)
 	struct timerqueue_node *next;
 	ktime_t now;
 	struct rtc_time tm;
-	int err;
 
 	struct rtc_device *rtc =
 		container_of(work, struct rtc_device, irqwork);
 
 	mutex_lock(&rtc->ops_lock);
 again:
-	err = __rtc_read_time(rtc, &tm);
-	if (err) {
-		mutex_unlock(&rtc->ops_lock);
-		return;
-	}
+	__rtc_read_time(rtc, &tm);
 	now = rtc_tm_to_ktime(tm);
 	while ((next = timerqueue_getnext(&rtc->timerqueue))) {
 		if (next->expires > now)

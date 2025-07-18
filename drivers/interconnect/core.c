@@ -337,9 +337,6 @@ static struct icc_node *of_icc_get_from_provider(struct of_phandle_args *spec)
 	}
 	mutex_unlock(&icc_lock);
 
-	if (!node)
-		return ERR_PTR(-EINVAL);
-
 	return node;
 }
 

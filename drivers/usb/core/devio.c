@@ -734,7 +734,6 @@ static int driver_resume(struct usb_interface *intf)
 	return 0;
 }
 
-#ifdef CONFIG_PM
 /* The following routines apply to the entire device, not interfaces */
 void usbfs_notify_suspend(struct usb_device *udev)
 {
@@ -753,7 +752,6 @@ void usbfs_notify_resume(struct usb_device *udev)
 	}
 	mutex_unlock(&usbfs_mutex);
 }
-#endif
 
 struct usb_driver usbfs_driver = {
 	.name =		"usbfs",

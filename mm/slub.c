@@ -1331,6 +1331,30 @@ out:
 
 __setup("slub_debug", setup_slub_debug);
 
+static const char *exclusion_list[] = {
+        "zspage",
+        "zs_handle",
+        "zswap_entry",
+        "avtab_node",
+        "vm_area_struct",
+        "anon_vma_chain",
+        "anon_vma"
+};
+
+static int is_kmem_cache_excluded(const char *str)
+{
+        int i, excluded = 0;
+
+        for (i = 0; i < (int)ARRAY_SIZE(exclusion_list); i++)
+        {
+                if(!strncmp(str, exclusion_list[i], strlen(exclusion_list[i]))) {
+                        excluded = 1;
+                        break;
+                }
+        }
+        return excluded;
+}
+
 /*
  * kmem_cache_flags - apply debugging options to the cache
  * @object_size:	the size of an object without meta data
@@ -1372,6 +1396,9 @@ slab_flags_t kmem_cache_flags(unsigned int object_size,
 			flags |= slub_debug;
 			break;
 		}
+
+		if (name && is_kmem_cache_excluded(name))
+			flags &= ~SLAB_STORE_USER;
 
 		if (!*end)
 			break;
@@ -6240,7 +6267,6 @@ static int sysfs_slab_alias(struct kmem_cache *s, const char *name)
 	return 0;
 }
 
-#ifdef CONFIG_SLUB_DEBUG
 #ifdef CONFIG_QCOM_MINIDUMP_PANIC_DUMP
 static ssize_t slab_owner_filter_write(struct file *file,
 					  const char __user *ubuf,
@@ -6322,8 +6348,7 @@ static const struct file_operations proc_slab_owner_handle_ops = {
 	.write	= slab_owner_handle_write,
 	.read	= slab_owner_handle_read,
 };
-#endif /* CONFIG_QCOM_MINIDUMP_PANIC_DUMP */
-#endif /* CONFIG_SLUB_DEBUG */
+#endif
 
 static int __init slab_sysfs_init(void)
 {
@@ -6368,7 +6393,6 @@ static int __init slab_sysfs_init(void)
 		kfree(al);
 	}
 
-#ifdef CONFIG_SLUB_DEBUG
 #ifdef CONFIG_QCOM_MINIDUMP_PANIC_DUMP
 	if (slub_debug) {
 		int i;
@@ -6383,7 +6407,6 @@ static int __init slab_sysfs_init(void)
 				set_bit(i, &slab_owner_filter);
 		}
 	}
-#endif
 #endif
 	mutex_unlock(&slab_mutex);
 	resiliency_test();

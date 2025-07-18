@@ -153,6 +153,8 @@ static struct mod_tree_root {
 	.addr_min = -1UL,
 };
 
+void *sec_qc_summary_mod_tree = &mod_tree;
+
 #define module_addr_min mod_tree.addr_min
 #define module_addr_max mod_tree.addr_max
 
@@ -2299,26 +2301,15 @@ static void free_module(struct module *mod)
 void *__symbol_get(const char *symbol)
 {
 	struct module *owner;
-	enum mod_license license;
 	const struct kernel_symbol *sym;
 
 	preempt_disable();
-	sym = find_symbol(symbol, &owner, NULL, &license, true, true);
-	if (!sym)
-		goto fail;
-	if (license != GPL_ONLY) {
-		pr_warn("failing symbol_get of non-GPLONLY symbol %s.\n",
-			symbol);
-		goto fail;
-	}
-	if (strong_try_module_get(owner))
+	sym = find_symbol(symbol, &owner, NULL, NULL, true, true);
+	if (sym && strong_try_module_get(owner))
 		sym = NULL;
 	preempt_enable();
 
 	return sym ? (void *)kernel_symbol_value(sym) : NULL;
-fail:
-	preempt_enable();
-	return NULL;
 }
 
 /*

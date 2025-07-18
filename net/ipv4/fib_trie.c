@@ -1448,8 +1448,7 @@ found:
 		}
 		if (fa->fa_tos && fa->fa_tos != flp->flowi4_tos)
 			continue;
-		/* Paired with WRITE_ONCE() in fib_release_info() */
-		if (READ_ONCE(fi->fib_dead))
+		if (fi->fib_dead)
 			continue;
 		if (fa->fa_info->fib_scope < flp->flowi4_scope)
 			continue;

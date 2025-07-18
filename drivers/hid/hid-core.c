@@ -290,7 +290,7 @@ static int hid_add_field(struct hid_parser *parser, unsigned report_type, unsign
 	offset = report->size;
 	report->size += parser->global.report_size * parser->global.report_count;
 
-	if (IS_BUILTIN(CONFIG_UHID) && parser->device->ll_driver == &uhid_hid_driver)
+	if (IS_ENABLED(CONFIG_UHID) && parser->device->ll_driver == &uhid_hid_driver)
 		max_buffer_size = UHID_DATA_MAX;
 
 	/* Total size check: Allow for possible report index byte */
@@ -1433,6 +1433,7 @@ static void implement(const struct hid_device *hid, u8 *report,
 			hid_warn(hid,
 				 "%s() called with too large value %d (n: %d)! (%s)\n",
 				 __func__, value, n, current->comm);
+			WARN_ON(1);
 			value &= m;
 		}
 	}
@@ -1547,6 +1548,42 @@ static void hid_input_field(struct hid_device *hid, struct hid_field *field,
 	value = kmalloc_array(count, sizeof(__s32), GFP_ATOMIC);
 	if (!value)
 		return;
+
+// +P86801AA1 lihesong.wt,add,20230816,add special key
+	if(data[0]==0xc9&&data[1]==0x2) {
+
+		input_event(field->hidinput->input, EV_KEY, 713, 1);
+		input_sync(field->hidinput->input);
+		input_event(field->hidinput->input, EV_KEY, 713, 0);
+		input_sync(field->hidinput->input);
+		return ;
+	}
+	if(data[0]==0xbd&&data[1]==0x2) {
+
+		input_event(field->hidinput->input, EV_KEY, 701, 1);
+		input_sync(field->hidinput->input);
+		input_event(field->hidinput->input, EV_KEY, 701, 0);
+		input_sync(field->hidinput->input);
+		return ;
+	}
+	if(data[0]==0xc2&&data[1]==0x2) {
+		input_event(field->hidinput->input, EV_KEY, 706, 1);
+		input_sync(field->hidinput->input);
+		input_event(field->hidinput->input, EV_KEY, 706, 0);
+		input_sync(field->hidinput->input);
+		return ;
+	}
+// -P86801AA1 lihesong.wt,add,20230816,add special key
+
+// +P86801AA1 lihesong.wt,add,20230819,add special key  Fn + backspace
+	if(data[0]==0x99) {
+		input_event(field->hidinput->input, EV_KEY, 99, 1);
+		input_sync(field->hidinput->input);
+		input_event(field->hidinput->input, EV_KEY, 99, 0);
+		input_sync(field->hidinput->input);
+		return ;
+	}
+// -P86801AA1 lihesong.wt,add,20230819,add special key Fn + backspace
 
 	for (n = 0; n < count; n++) {
 
@@ -1766,7 +1803,7 @@ int hid_report_raw_event(struct hid_device *hid, int type, u8 *data, u32 size,
 
 	rsize = hid_compute_report_size(report);
 
-	if (IS_BUILTIN(CONFIG_UHID) && hid->ll_driver == &uhid_hid_driver)
+	if (IS_ENABLED(CONFIG_UHID) && hid->ll_driver == &uhid_hid_driver)
 		max_buffer_size = UHID_DATA_MAX;
 
 	if (report_enum->numbered && rsize >= max_buffer_size)
@@ -1972,6 +2009,12 @@ int hid_connect(struct hid_device *hdev, unsigned int connect_mask)
 
 	/* Drivers with the ->raw_event callback set are not required to connect
 	 * to any other listener. */
+	 //+P230816-00963, caoxin2.wt, modify, 2023.08.18, resolve kernel panic
+	if (hdev->driver == NULL) {
+		hid_err(hdev, "%s:hdev->driver == NULL\n", __func__);
+		return -ENODEV;
+	}
+	//-P230816-00963, caoxin2.wt, modify, 2023.08.18, resolve kernel panic
 	if (!hdev->claimed && !hdev->driver->raw_event) {
 		hid_err(hdev, "device has no listeners, quitting\n");
 		return -ENODEV;
