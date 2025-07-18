@@ -68,6 +68,9 @@ obj-$(CONFIG_QCOM_RPMPD) += rpmpd.o
 obj-$(CONFIG_QMP_DEBUGFS_CLIENT) += qmp-debugfs-client.o
 obj-$(CONFIG_QCOM_SMP2P_SLEEPSTATE) += smp2p_sleepstate.o
 obj-$(CONFIG_SENSORS_SSC) += sensors_ssc.o
+#+P86801AA1, ludandan2.wt, add, 2023.05.06, sensor bringup
+obj-$(CONFIG_SENSORS)     += sensors_class.o
+#-P86801AA1, ludandan2.wt, add, 2023.05.06, sensor bringup
 obj-$(CONFIG_QCOM_GLINK_PKT) += glink_pkt.o
 obj-$(CONFIG_QSEE_IPC_IRQ) += qsee_ipc_irq.o
 obj-$(CONFIG_QCOM_GLINK) += glink_probe.o
@@ -127,3 +130,7 @@ obj-$(CONFIG_QCOM_CX_IPEAK) += cx_ipeak.o
 obj-$(CONFIG_GNSS_SIRF)		+= gnsssirf/
 obj-$(CONFIG_MSM_SEB) += slate_events_bridge.o
 obj-$(CONFIG_MSM_SEB_RPMSG) += slate_events_bridge_rpmsg.o
+#P86801AA1-3505,xieshuaishuai.wt,MOD,20230501,add node to check secureboot state.
+obj-$(CONFIG_WT_SECUREBOOT_FUSE_STATE) += secboot_fuse.o
+#P86801AA1-3505,xieshuaishuai.wt,MOD,20230501,add node to check serial number.
+obj-$(CONFIG_WT_SERIAL_NUMBER_STATE) += serial_num.o

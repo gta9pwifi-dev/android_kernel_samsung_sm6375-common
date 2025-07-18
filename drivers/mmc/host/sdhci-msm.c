@@ -31,6 +31,18 @@
 #include "../core/core.h"
 #endif
 
+//+ bug P86801AA1-3474 houdujing.wt add 20230503 add sd_tray_gpio_value node
+#include <linux/proc_fs.h>
+#include <linux/of_gpio.h>
+#include <linux/gpio.h>
+//- bug P86801AA1-3474 houdujing.wt add 20230503 add sd_tray_gpio_value node
+
+#if IS_ENABLED(CONFIG_SEC_MMC_FEATURE)
+#include <linux/samsung/bsp/sec_class.h>
+#include <linux/mmc/slot-gpio.h>
+#include "../core/card.h"
+#endif
+
 #define CORE_MCI_VERSION		0x50
 #define CORE_VERSION_MAJOR_SHIFT	28
 #define CORE_VERSION_MAJOR_MASK		(0xf << CORE_VERSION_MAJOR_SHIFT)
@@ -169,6 +181,7 @@
 /* enum for writing to TLMM_NORTH_SPARE register as defined by pinctrl API */
 #define TLMM_NORTH_SPARE	2
 #define TLMM_NORTH_SPARE_CORE_IE	BIT(15)
+
 
 struct sdhci_msm_offset {
 	u32 core_hc_mode;
@@ -477,6 +490,7 @@ struct sdhci_msm_host {
 };
 
 static struct sdhci_msm_host *sdhci_slot[2];
+static int sdhci_irq_gpio = 0;//bug P86801AA1-3474 houdujing.wt add 20230503 add sd_tray_gpio_value node
 
 static int sdhci_msm_update_qos_constraints(struct qos_cpu_group *qcg,
 					enum constraint type);
@@ -1839,7 +1853,11 @@ static bool sdhci_msm_populate_pdata(struct device *dev,
 	struct device_node *np = dev->of_node;
 	int ice_clk_table_len;
 	u32 *ice_clk_table = NULL;
-
+//+ bug P86801AA1-3474 houdujing.wt add 20230503 add sd_tray_gpio_value node
+	enum of_gpio_flags flags;
+	sdhci_irq_gpio = of_get_named_gpio_flags(np, "cd-gpios", 0, &flags);
+	pr_debug("%s: %s sdhci_irq_gpio: %d\n", mmc_hostname(msm_host->mmc), __func__, sdhci_irq_gpio);
+//- bug P86801AA1-3474 houdujing.wt add 20230503 add sd_tray_gpio_value node
 	msm_host->vreg_data = devm_kzalloc(dev, sizeof(struct
 						    sdhci_msm_vreg_data),
 					GFP_KERNEL);
@@ -4134,6 +4152,195 @@ static int sdhci_msm_setup_ice_clk(struct sdhci_msm_host *msm_host,
 	return ret;
 }
 
+#if IS_ENABLED(CONFIG_SEC_MMC_FEATURE)
+/* SYSFS about SD Card Detection */
+static struct device *sd_card_dev;
+
+static ssize_t t_flash_detect_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sdhci_msm_host *msm_host = dev_get_drvdata(dev);
+
+	if (!mmc_gpio_get_cd(msm_host->mmc)) {
+		pr_debug("SD slot tray Removed.\n");
+		return sprintf(buf, "Notray\n");
+	}
+	if (msm_host->mmc->card) {
+		pr_debug("External sd: card inserted.\n");
+		return sprintf(buf, "Insert\n");
+	}
+
+	pr_debug("External sd: card removed.\n");
+	return sprintf(buf, "Remove\n");
+}
+
+static struct device *sd_info_dev;
+static ssize_t sd_count_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sdhci_msm_host *msm_host = dev_get_drvdata(dev);
+	struct mmc_host *host = msm_host->mmc;
+	struct mmc_card *card = host->card;
+	struct mmc_card_error_log *err_log;
+	u64 total_cnt = 0;
+	int len = 0;
+	int i = 0;
+
+	if (!card) {
+		len = snprintf(buf, PAGE_SIZE, "no card\n");
+		goto out;
+	}
+
+	err_log = card->err_log;
+
+	//Only sbc(0,1)/cmd(2,3)/data(4,5) is checked.
+	for (i = 0; i < 6; i++) {
+		if (total_cnt < MAX_CNT_U64)
+			total_cnt += err_log[i].count;
+	}
+	len = snprintf(buf, PAGE_SIZE, "%lld\n", total_cnt);
+
+out:
+	return len;
+}
+
+static ssize_t sd_cid_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sdhci_msm_host *msm_host = dev_get_drvdata(dev);
+	struct mmc_host *host = msm_host->mmc;
+	struct mmc_card *card = host->card;
+	int len = 0;
+
+	if (!card) {
+		len = snprintf(buf, PAGE_SIZE, "no card\n");
+		goto out;
+	}
+
+	len = snprintf(buf, PAGE_SIZE,
+			"%08x%08x%08x%08x\n",
+			card->raw_cid[0], card->raw_cid[1],
+			card->raw_cid[2], card->raw_cid[3]);
+out:
+	return len;
+}
+
+static inline bool is_bad_condition(struct mmc_card_status_err_log *err_log,
+		u64 total_c_cnt, u64 total_t_cnt)
+{
+	return (err_log->ge_cnt > 100 || err_log->ecc_cnt > 0 ||
+			err_log->wp_cnt > 0 || err_log->oor_cnt > 10 ||
+			total_c_cnt > 100 || total_t_cnt > 100);
+}
+
+/*
+ * fc : fault card
+ * The specific app reads fc node to distinguish between BAD and GOOD card.
+ */
+static ssize_t sd_health_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sdhci_msm_host *msm_host = dev_get_drvdata(dev);
+	struct mmc_host *host = msm_host->mmc;
+	struct mmc_card *card = host->card;
+	struct mmc_card_error_log *err_log;
+	struct mmc_card_status_err_log *status_err_log;
+	u64 total_c_cnt = 0;
+	u64 total_t_cnt = 0;
+	int len = 0;
+
+	if (!card) {
+		//There should be no spaces in 'No Card'(Vold Team).
+		len = snprintf(buf, PAGE_SIZE, "NOCARD\n");
+		goto out;
+	}
+
+	err_log = card->err_log;
+	status_err_log = &card->status_err_log;
+
+	mmc_check_error_count(err_log, &total_c_cnt, &total_t_cnt);
+
+	if (is_bad_condition(status_err_log, total_c_cnt, total_t_cnt))
+		len = snprintf(buf, PAGE_SIZE, "BAD\n");
+	else
+		len = snprintf(buf, PAGE_SIZE, "GOOD\n");
+
+out:
+	return len;
+}
+
+static ssize_t sd_reason_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sdhci_msm_host *msm_host = dev_get_drvdata(dev);
+	struct mmc_host *host = msm_host->mmc;
+	struct mmc_card *card = host->card;
+	char *reason = NULL;
+
+	if (card)
+		reason = mmc_card_readonly(card) ? "PERMWP" : "NORMAL";
+	else
+		reason = host->failed_init ? "INITFAIL" : "NOCARD";
+
+	return snprintf(buf, PAGE_SIZE, "%s\n", reason);
+}
+
+static DEVICE_ATTR(status, 0444, t_flash_detect_show, NULL);
+static DEVICE_ATTR(sd_count, 0444, sd_count_show, NULL);
+static DEVICE_ATTR(data, 0444, sd_cid_show, NULL);
+static DEVICE_ATTR(fc, 0444, sd_health_show, NULL);
+static DEVICE_ATTR(reason, 0444, sd_reason_show, NULL);
+
+static struct attribute *sd_card_attributes[] = {
+	&dev_attr_status.attr,
+	NULL
+};
+
+static struct attribute_group sd_card_attribute_group = {
+	.attrs = sd_card_attributes,
+};
+
+static struct attribute *sd_info_attributes[] = {
+	&dev_attr_sd_count.attr,
+	&dev_attr_data.attr,
+	&dev_attr_fc.attr,
+	&dev_attr_reason.attr,
+	NULL
+};
+
+static struct attribute_group sd_info_attribute_group = {
+	.attrs = sd_info_attributes,
+};
+
+static void sdhci_sec_create_sysfs_group(struct sdhci_msm_host *msm_host,
+		struct device **dev, const struct attribute_group *dev_attr_group,
+		const char *str)
+{
+	*dev = sec_device_create(NULL, str);
+	if (IS_ERR(*dev)) {
+		pr_err("%s: Failed to create device!\n", __func__);
+		return;
+	}
+
+	if (sysfs_create_group(&(*dev)->kobj, dev_attr_group))
+		pr_err("%s: Failed to create %s sysfs group\n", __func__, str);
+	else
+		dev_set_drvdata(*dev, msm_host);
+}
+
+static void sdhci_sec_init_sysfs(struct sdhci_host *host,
+		struct sdhci_msm_host *msm_host)
+{
+	if (sd_card_dev == NULL && !strcmp(host->hw_name, "4784000.sdhci"))
+		sdhci_sec_create_sysfs_group(msm_host, &sd_card_dev,
+				&sd_card_attribute_group, "sdcard");
+
+	if (sd_info_dev == NULL && !strcmp(host->hw_name, "4784000.sdhci"))
+		sdhci_sec_create_sysfs_group(msm_host, &sd_info_dev,
+				&sd_info_attribute_group, "sdinfo");
+}
+#endif //CONFIG_SEC_MMC_FEATURE
+
 #if defined(CONFIG_SDC_QTI)
 static ssize_t err_state_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
@@ -4266,9 +4473,49 @@ static int sdhci_msm_init_sysfs(struct platform_device *pdev)
 
 static void sdhci_msm_set_caps(struct sdhci_msm_host *msm_host)
 {
-	msm_host->mmc->caps |= MMC_CAP_AGGRESSIVE_PM;
+	//msm_host->mmc->caps |= MMC_CAP_AGGRESSIVE_PM; /* +bugP86801AA1-3613 houdujing.wt,add,20230430 disable aggressive pm*/
 	msm_host->mmc->caps |= MMC_CAP_WAIT_WHILE_BUSY | MMC_CAP_NEED_RSP_BUSY;
 }
+
+//+ bug P86801AA1-3474 houdujing.wt add 20230503 add sd_tray_gpio_value node
+static int sim_card_status_show(struct seq_file *m, void *v)
+{
+	int gpio_value;
+
+	gpio_value = gpio_get_value_cansleep(sdhci_irq_gpio);
+	pr_debug("%s: gpio_value is %d\n", __func__, gpio_value);
+	seq_printf(m, "%d\n", gpio_value);
+
+	return 0;
+}
+
+static int sim_card_status_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, sim_card_status_show, NULL);
+}
+
+static const struct file_operations sim_card_status_fops = {
+	.open        = sim_card_status_proc_open,
+	.read        = seq_read,
+	.llseek      = seq_lseek,
+	.release     = single_release,
+};
+
+static int sim_card_tray_create_proc(void)
+{
+	struct proc_dir_entry *status_entry;
+
+	status_entry = proc_create("sd_tray_gpio_value", 0, NULL, &sim_card_status_fops);
+	if (!status_entry){
+		return -ENOMEM;
+	}
+	return 0;
+}
+static void sim_card_tray_remove_proc(void)
+{
+	remove_proc_entry("sd_tray_gpio_value", NULL);
+}
+//- bug P86801AA1-3474 houdujing.wt add 20230503 add sd_tray_gpio_value node
 
 static int sdhci_msm_probe(struct platform_device *pdev)
 {
@@ -4522,6 +4769,12 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	 */
 	mb();
 
+	//+ bug P86801AA1-3474 houdujing.wt add 20230503 add sd_tray_gpio_value node
+	if(!strcmp(mmc_hostname(host->mmc), "mmc1")){
+		sim_card_tray_create_proc();
+	}
+	//- bug P86801AA1-3474 houdujing.wt add 20230503 add sd_tray_gpio_value node
+
 	/* Setup IRQ for handling power/voltage tasks with PMIC */
 	msm_host->pwr_irq = platform_get_irq_byname(pdev, "pwr_irq");
 	if (msm_host->pwr_irq < 0) {
@@ -4546,7 +4799,7 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 
 #if defined(CONFIG_SDC_QTI)
 	host->timeout_clk_div = 4;
-	msm_host->mmc->caps2 |= MMC_CAP2_CLK_SCALE;
+	//msm_host->mmc->caps2 |= MMC_CAP2_CLK_SCALE; /* +bugP86801AA1-36598 houdujing.wt,add,20230430 disable EMMC CLK Scale*/
 #endif
 	sdhci_msm_setup_pm(pdev, msm_host);
 
@@ -4599,6 +4852,11 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 #if defined(CONFIG_SDC_QTI)
 	sdhci_msm_init_sysfs(pdev);
 #endif
+
+#if IS_ENABLED(CONFIG_SEC_MMC_FEATURE)
+	sdhci_sec_init_sysfs(host, msm_host);
+#endif
+
 	/*
 	 * Set platfm_init_done only after sdhci_add_host().
 	 * So that we don't turn off vqmmc while we reset sdhc as
@@ -4630,6 +4888,11 @@ bus_clk_disable:
 		clk_disable_unprepare(msm_host->bus_clk);
 pltfm_free:
 	sdhci_pltfm_free(pdev);
+//+ bug P86801AA1-3474 houdujing.wt add 20230503 add sd_tray_gpio_value node
+	if(!strcmp(mmc_hostname(host->mmc), "mmc1")){
+		sim_card_tray_remove_proc();
+	}
+//- bug P86801AA1-3474 houdujing.wt add 20230503 add sd_tray_gpio_value node
 	return ret;
 }
 

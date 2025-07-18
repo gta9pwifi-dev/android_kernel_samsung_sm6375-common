@@ -6,7 +6,12 @@
 # Each configuration option enables a list of files.
 
 wm97xx-ts-y := wm97xx-core.o
-
+# +P86801AA1 peiyuexiang.wt,add,20230506,add sec_tsp node
+obj-$(CONFIG_TP_SEC_CMD)		+= sec_cmd.o
+# -P86801AA1 peiyuexiang.wt,add,20230506,add sec_tsp node
+# +P86801AA1,peiyuexiang.wt,modify,2023/06/19,add charger_mode
+obj-$(CONFIG_INPUT_TOUCHSCREEN)		+= tp_notifier.o
+# -P86801AA1,peiyuexiang.wt,modify,2023/06/19,add charger_mode
 obj-$(CONFIG_TOUCHSCREEN_PROPERTIES)	+= of_touchscreen.o
 obj-$(CONFIG_TOUCHSCREEN_88PM860X)	+= 88pm860x-ts.o
 obj-$(CONFIG_TOUCHSCREEN_AD7877)	+= ad7877.o
@@ -110,8 +115,12 @@ obj-$(CONFIG_TOUCHSCREEN_COLIBRI_VF50)	+= colibri-vf50-ts.o
 obj-$(CONFIG_TOUCHSCREEN_ROHM_BU21023)	+= rohm_bu21023.o
 obj-$(CONFIG_TOUCHSCREEN_RASPBERRYPI_FW)	+= raspberrypi-ts.o
 obj-$(CONFIG_TOUCHSCREEN_IQS5XX)	+= iqs5xx.o
-obj-$(CONFIG_TOUCHSCREEN_ST)	+= st/
-obj-$(CONFIG_TOUCHSCREEN_FTS)	+= focaltech_touch/
-obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_TCM)	+= synaptics_tcm/
-obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX) += synaptics_dsx/
-obj-$(CONFIG_TOUCHSCREEN_NT36XXX)	+= nt36xxx/
+#obj-$(CONFIG_TOUCHSCREEN_ST)	+= st/
+#obj-$(CONFIG_TOUCHSCREEN_FTS)	+= focaltech_touch/
+#obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_TCM)	+= synaptics_tcm/
+#obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX) += synaptics_dsx/
+#obj-$(CONFIG_TOUCHSCREEN_NT36XXX)	+= nt36xxx/
+obj-$(CONFIG_TOUCHSCREEN_FTS)	+= focaltech_touch_spi/
+obj-$(CONFIG_TOUCHSCREEN_CHIPONE_ICNL9958R)	+= chipone_tddi_spi/
+obj-$(CONFIG_TOUCHSCREEN_HIMAX_CHIPSET)	+= himax_hx83102j_spi/
+obj-$(CONFIG_TOUCHSCREEN_JADARD_CHIPSET)	+= jdchipset/

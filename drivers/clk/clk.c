@@ -3480,8 +3480,8 @@ static const struct file_operations clk_enabled_list_fops = {
 	.llseek		= seq_lseek,
 	.release	= seq_release,
 };
-
-static u32 debug_suspend;
+//+P86801AA1-3866, yexiaojun.wt, modify, 20230519, add kernel debug log
+static u32 debug_suspend = 1;
 
 /*
  * Print the names of all enabled clocks and their parents if

@@ -186,3 +186,10 @@ obj-$(CONFIG_SIOX)		+= siox/
 obj-$(CONFIG_GNSS)		+= gnss/
 obj-$(CONFIG_INTERCONNECT)	+= interconnect/
 obj-$(CONFIG_COUNTER)		+= counter/
+
+#P86801AA1-3805,xieshuaishuai.wt, add, 20230724, add wt bootloader log feature.
+obj-y				+= wt_sys/
+# P86801AA1-3673, zhangbin02.wt, add, 2023.05.05, grdm bringup
+obj-$(CONFIG_GUARDIANM_SEC)	+= guardianm/
+
+obj-y				+= samsung/

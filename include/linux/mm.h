@@ -27,6 +27,7 @@
 #include <linux/page_ref.h>
 #include <linux/memremap.h>
 #include <linux/overflow.h>
+#include <linux/ratelimit.h>
 #include <linux/sizes.h>
 #include <linux/android_kabi.h>
 #include <linux/android_vendor.h>
@@ -2562,10 +2563,20 @@ extern unsigned long unmapped_area_topdown(struct vm_unmapped_area_info *info);
 static inline unsigned long
 vm_unmapped_area(struct vm_unmapped_area_info *info)
 {
+	unsigned long addr;
+
 	if (info->flags & VM_UNMAPPED_AREA_TOPDOWN)
-		return unmapped_area_topdown(info);
+		addr = unmapped_area_topdown(info);
 	else
-		return unmapped_area(info);
+		addr = unmapped_area(info);
+
+	if (IS_ERR_VALUE(addr)) {
+		pr_warn_ratelimited("%s err:%ld total_vm:0x%lx flags:0x%lx len:0x%lx low:0x%lx high:0x%lx mask:0x%lx offset:0x%lx\n",
+			__func__, addr, current->mm->total_vm, info->flags,
+			info->length, info->low_limit, info->high_limit,
+			info->align_mask, info->align_offset);
+	}
+	return addr;
 }
 
 /* truncate.c */
@@ -2586,6 +2597,7 @@ void task_dirty_inc(struct task_struct *tsk);
 
 /* readahead.c */
 #define VM_READAHEAD_PAGES	(SZ_512K / PAGE_SIZE)
+extern unsigned int mmap_readaround_limit;
 
 int force_page_cache_readahead(struct address_space *mapping, struct file *filp,
 			pgoff_t offset, unsigned long nr_to_read);
@@ -3059,6 +3071,8 @@ void __init setup_nr_node_ids(void);
 #else
 static inline void setup_nr_node_ids(void) {}
 #endif
+
+extern inline bool need_memory_boosting(void);
 
 extern int memcmp_pages(struct page *page1, struct page *page2);
 

@@ -3098,6 +3098,8 @@ int _mmc_detect_card_removed(struct mmc_host *host)
 	if (ret) {
 		mmc_card_set_removed(host->card);
 		pr_debug("%s: card remove detected\n", mmc_hostname(host));
+		ST_LOG("<%s> %s: card remove detected\n", __func__,
+				mmc_hostname(host));
 	}
 
 	return ret;

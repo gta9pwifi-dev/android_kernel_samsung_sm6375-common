@@ -559,13 +559,28 @@ static int gs_start_io(struct gs_port *port)
 	/* queue read requests */
 	port->n_read = 0;
 	started = gs_start_rx(port);
+#ifdef CONFIG_QGKI_BUILD
+         /*
+	 * The TTY may be set to NULL by gs_close() after gs_start_rx() or
+	 * gs_start_tx() release locks for endpoint request submission.
+	 */
+	if (!port->port.tty)
+		goto out;
+#endif
 
 	if (started) {
 		gs_start_tx(port);
 		/* Unblock any pending writes into our circular buffer, in case
 		 * we didn't in gs_start_tx() */
+#ifdef CONFIG_QGKI_BUILD
+		if (!port->port.tty)
+			goto out;
+#endif
 		tty_wakeup(port->port.tty);
 	} else {
+#ifdef CONFIG_QGKI_BUILD
+out:
+#endif
 		gs_free_requests(ep, head, &port->read_allocated);
 		gs_free_requests(port->port_usb->in, &port->write_pool,
 			&port->write_allocated);
