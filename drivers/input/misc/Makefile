@@ -87,4 +87,14 @@ obj-$(CONFIG_INPUT_WM831X_ON)		+= wm831x-on.o
 obj-$(CONFIG_INPUT_XEN_KBDDEV_FRONTEND)	+= xen-kbdfront.o
 obj-$(CONFIG_INPUT_YEALINK)		+= yealink.o
 obj-$(CONFIG_INPUT_IDEAPAD_SLIDEBAR)	+= ideapad_slidebar.o
-
+#+P86801AA1, ludandan2.wt, add, 2023.05.06, sensor bringup
+ifeq ($(filter $(PRODUCT_NAME_WT_KERNEL), P86801EA1), $(PRODUCT_NAME_WT_KERNEL))
+subdir-ccflags-y += -DCONFIG_AMERICA_VERSION
+endif
+obj-$(CONFIG_INPUT_HX9036)              += hx9036.o
+obj-$(CONFIG_INPUT_HX9036_NA)              += hx9036_na.o
+obj-$(CONFIG_INPUT_HX9023S)             += hx9023s.o
+obj-$(CONFIG_INPUT_SX937X)              += sx933x_937x_sar.o
+obj-$(CONFIG_INPUT_SX937X_NA)           += sx933x_937x_sar_na.o
+obj-$(CONFIG_INPUT_SX932X)              += sx932x.o
+#-P86801AA1, ludandan2.wt, add, 2023.05.06, sensor bringup

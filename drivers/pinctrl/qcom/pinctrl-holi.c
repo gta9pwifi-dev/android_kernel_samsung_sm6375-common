@@ -1537,9 +1537,11 @@ static const struct msm_pingroup holi_groups[] = {
 	[163] = SDC_QDSD_PINGROUP(sdc2_data, 0x1a2000, 9, 0),
 };
 
+//P86801AA1-1797, caoxin2.wt, modify, 2023.05.25, KB bringup
 static const int holi_reserved_gpios[] = {
-	13, 14, 15, 16, 45, 46, 56, 57, -1
+	 45, 46, 56, 57, -1
 };
+//P86801AA1-1797, caoxin2.wt, modify, 2023.05.25, KB bringup
 
 static const struct msm_gpio_wakeirq_map holi_mpm_map[] = {
 	{0, 84},

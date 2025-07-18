@@ -648,4 +648,8 @@ config RANDOM_TRUST_BOOTLOADER
 	  believe its RNG facilities may be faulty. This may also be configured
 	  at boot time with "random.trust_bootloader=on/off".
 
+config EARJACK
+	tristate "Detect headset state"
+	help
+	  Detect the headset state for factory test.
 endmenu

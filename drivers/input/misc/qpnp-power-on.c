@@ -26,6 +26,9 @@
 #include <linux/regulator/driver.h>
 #include <linux/regulator/machine.h>
 #include <linux/regulator/of_regulator.h>
+#ifdef CONFIG_QGKI_BUILD
+#include <linux/hardware_info.h>//P86801AA1-1797, wangkangmin.wt, 20230412, add hardware board id info
+#endif
 
 #define PMIC_VER_8941				0x01
 #define PMIC_VERSION_REG			0x0105
@@ -1030,7 +1033,8 @@ static int qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 		return -EINVAL;
 	}
 
-	pr_debug("PMIC input: code=%d, status=0x%02X\n", cfg->key_code,
+	//P86801AA1-3879, zhaoshuaiqi01,20230429, modify, open key_code kernel log
+	pr_err("PMIC input: code=%d, status=0x%02X\n", cfg->key_code,
 		pon_rt_sts);
 	key_status = pon_rt_sts & pon_rt_bit;
 
@@ -2360,6 +2364,60 @@ static int qpnp_pon_parse_dt_power_off_config(struct qpnp_pon *pon)
 	return 0;
 }
 
+#ifdef CONFIG_QGKI_BUILD
+/*+P86801AA1-1797, wangkangmin.wt, 20230412, add hardware board id info*/
+extern char board_id[HARDWARE_MAX_ITEM_LONGTH];
+void probe_board_and_set(void)
+{
+	char* boardid_start;
+	char boardid_info[HARDWARE_MAX_ITEM_LONGTH];
+	int len = 0;
+
+	boardid_start = strstr(saved_command_line,"board_id=");
+	memset(boardid_info, 0, HARDWARE_MAX_ITEM_LONGTH);
+	if(boardid_start != NULL)
+	{
+          boardid_start += strlen("board_id=");
+          len = strstr(boardid_start, " ") - boardid_start;
+          if(len < 12)
+            strncpy(boardid_info, boardid_start, len);
+          else
+            sprintf(boardid_info, "boarid id len too long!");
+	}
+	else
+	{
+		sprintf(boardid_info, "boarid not define!");
+	}
+	strlcpy(board_id, boardid_info, HARDWARE_MAX_ITEM_LONGTH);
+}
+
+extern char hardware_id[HARDWARE_MAX_ITEM_LONGTH];
+void probe_hardware_and_set(void)
+{
+	char* hw_id_start;
+	char hw_id_info[HARDWARE_MAX_ITEM_LONGTH];
+	int len = 0;
+
+	hw_id_start = strstr(saved_command_line,"hwlevel=");
+	memset(hw_id_info, 0, HARDWARE_MAX_ITEM_LONGTH);
+	if(hw_id_start != NULL)
+	{
+        hw_id_start += strlen("hwlevel=");
+        len = strstr(hw_id_start," ") - hw_id_start;
+        if(len < 13)
+          strncpy(hw_id_info, hw_id_start, len);//skip the header "hwlevel="
+        else
+          sprintf(hw_id_info, "hardware id len too long!");
+	}
+	else
+	{
+		sprintf(hw_id_info, "hardware id not define!");
+	}
+	strlcpy(hardware_id, hw_id_info, HARDWARE_MAX_ITEM_LONGTH);
+}
+#endif
+/*-P86801AA1-1797, wangkangmin.wt, 20230412, add hardware board id info*/
+
 static int qpnp_pon_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -2503,6 +2561,13 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 		modem_reset_dev = pon;
 
 	qpnp_pon_debugfs_init(pon);
+
+        /*+P86801AA1-1797, wangkangmin.wt, 20230412, add hardware board id info*/
+        #ifdef CONFIG_QGKI_BUILD
+        probe_board_and_set();
+        probe_hardware_and_set();
+        #endif
+        /*-P86801AA1-1797, wangkangmin.wt, 20230412, add hardware board id info*/
 
 	return 0;
 }

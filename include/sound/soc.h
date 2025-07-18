@@ -1438,6 +1438,16 @@ extern struct dentry *snd_soc_debugfs_root;
 
 extern const struct dev_pm_ops snd_soc_pm_ops;
 
+enum{
+   INVALD = -1,
+   FS16XX,
+   AW88261,
+   AW88266,
+   TAS2558,
+   FS1962,
+   AW88257,
+   MAX_NUM,
+};
 /* Helper functions */
 static inline void snd_soc_dapm_mutex_lock(struct snd_soc_dapm_context *dapm)
 {

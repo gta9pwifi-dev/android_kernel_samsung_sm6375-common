@@ -437,3 +437,16 @@ module_exit(qcom_dload_driver_exit);
 
 MODULE_DESCRIPTION("MSM Download Mode Driver");
 MODULE_LICENSE("GPL v2");
+
+#if IS_ENABLED(CONFIG_SEC_QC_QCOM_REBOOT_REASON)
+void qcom_set_dload_mode(int on)
+{
+	if (on)
+		set_download_mode(QCOM_DOWNLOAD_FULLDUMP);
+	else
+		set_download_mode(QCOM_DOWNLOAD_NODUMP);
+
+	pr_warn("set_dload_mode <%d> (%pS)\n", on, __builtin_return_address(0));
+}
+EXPORT_SYMBOL(qcom_set_dload_mode);
+#endif

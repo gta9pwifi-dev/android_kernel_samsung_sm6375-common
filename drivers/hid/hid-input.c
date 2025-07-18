@@ -32,7 +32,7 @@ static const unsigned char hid_keyboard[256] = {
 	 65, 66, 67, 68, 87, 88, 99, 70,119,110,102,104,111,107,109,106,
 	105,108,103, 69, 98, 55, 74, 78, 96, 79, 80, 81, 75, 76, 77, 71,
 	 72, 73, 82, 83, 86,127,116,117,183,184,185,186,187,188,189,190,
-	191,192,193,194,134,138,130,132,128,129,131,137,133,135,136,113,
+	191,192,193,194,134,138,130,132,128,129,122,137,133,135,136,113,
 	115,114,unk,unk,unk,121,unk, 89, 93,124, 92, 94, 95,unk,unk,unk,
 	122,123, 90, 91, 85,unk,unk,unk,unk,unk,unk,unk,111,unk,unk,unk,
 	unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,
@@ -57,6 +57,9 @@ static const struct {
 		&max, EV_ABS, (c))
 #define map_key_clear(c)	hid_map_usage_clear(hidinput, usage, &bit, \
 		&max, EV_KEY, (c))
+
+bool kbd_genuine = false;
+EXPORT_SYMBOL_GPL(kbd_genuine);
 
 static bool match_scancode(struct hid_usage *usage,
 			   unsigned int cur_idx, unsigned int scancode)
@@ -161,6 +164,9 @@ static int hidinput_setkeycode(struct input_dev *dev,
 		*old_keycode = usage->type == EV_KEY ?
 				usage->code : KEY_RESERVED;
 		usage->code = ke->keycode;
+
+		if (usage->code > KEY_MAX || *old_keycode > KEY_MAX)
+			return -EINVAL;
 
 		clear_bit(*old_keycode, dev->keybit);
 		set_bit(usage->code, dev->keybit);
@@ -948,6 +954,13 @@ static void hidinput_configure_usage(struct hid_input *hidinput, struct hid_fiel
 		case 0x09d: map_key_clear(KEY_CHANNELDOWN);	break;
 		case 0x0a0: map_key_clear(KEY_VCR2);		break;
 
+// +P86801AA1 lihesong.wt,add,20230816,add special key
+		case 0x099: map_key_clear(KEY_SYSRQ);		break;
+		case 0x2c9: map_key_clear(BTN_TRIGGER_HAPPY10); break;
+		case 0x2c2: map_key_clear(BTN_TRIGGER_HAPPY3);  break;
+		case 0x2bd: map_key_clear(KEY_BACKROOM);	break;
+// -P86801AA1 lihesong.wt,add,20230816,add special key
+
 		case 0x0b0: map_key_clear(KEY_PLAY);		break;
 		case 0x0b1: map_key_clear(KEY_PAUSE);		break;
 		case 0x0b2: map_key_clear(KEY_RECORD);		break;
@@ -1060,7 +1073,6 @@ static void hidinput_configure_usage(struct hid_input *hidinput, struct hid_fiel
 
 		case 0x2c7: map_key_clear(KEY_KBDINPUTASSIST_PREV);		break;
 		case 0x2c8: map_key_clear(KEY_KBDINPUTASSIST_NEXT);		break;
-		case 0x2c9: map_key_clear(KEY_KBDINPUTASSIST_PREVGROUP);		break;
 		case 0x2ca: map_key_clear(KEY_KBDINPUTASSIST_NEXTGROUP);		break;
 		case 0x2cb: map_key_clear(KEY_KBDINPUTASSIST_ACCEPT);	break;
 		case 0x2cc: map_key_clear(KEY_KBDINPUTASSIST_CANCEL);	break;
@@ -1582,6 +1594,7 @@ static void hidinput_close(struct input_dev *dev)
 	hid_hw_close(hid);
 }
 
+#if 0
 static bool __hidinput_change_resolution_multipliers(struct hid_device *hid,
 		struct hid_report *report, bool use_logical_max)
 {
@@ -1652,6 +1665,7 @@ static void hidinput_change_resolution_multipliers(struct hid_device *hid)
 	/* refresh our structs */
 	hid_setup_resolution_multiplier(hid);
 }
+#endif
 
 static void report_features(struct hid_device *hid)
 {
@@ -1736,8 +1750,13 @@ static struct hid_input *hidinput_allocate(struct hid_device *hid,
 		suffix_len = strlen(suffix);
 		if ((name_len < suffix_len) ||
 		    strcmp(hid->name + name_len - suffix_len, suffix)) {
-			hidinput->name = kasprintf(GFP_KERNEL, "%s %s",
-						   hid->name, suffix);
+			if (kbd_genuine) {
+				hidinput->name = kasprintf(GFP_KERNEL, "%s",
+							hid->name);
+			} else {
+				hidinput->name = kasprintf(GFP_KERNEL, "%s %s",
+							hid->name, suffix);
+			}
 			if (!hidinput->name)
 				goto fail;
 		}
@@ -1946,7 +1965,7 @@ int hidinput_connect(struct hid_device *hid, unsigned int force)
 		}
 	}
 
-	hidinput_change_resolution_multipliers(hid);
+	//hidinput_change_resolution_multipliers(hid);
 
 	list_for_each_entry_safe(hidinput, next, &hid->inputs, list) {
 		if (drv->input_configured &&

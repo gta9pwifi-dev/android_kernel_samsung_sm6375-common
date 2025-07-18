@@ -116,15 +116,33 @@ static inline u64 __raw_readq(const volatile void __iomem *addr)
  * ordering rules but do not guarantee any ordering relative to Normal memory
  * accesses.
  */
+/*+P86801AA1-1797,wangkangmin.wt,ADD,20230626, add for gki build*/
+#ifndef readb_relaxed
 #define readb_relaxed(c)	({ u8  __r = __raw_readb(c); __r; })
+#endif
+#ifndef readw_relaxed
 #define readw_relaxed(c)	({ u16 __r = le16_to_cpu((__force __le16)__raw_readw(c)); __r; })
+#endif
+#ifndef readl_relaxed
 #define readl_relaxed(c)	({ u32 __r = le32_to_cpu((__force __le32)__raw_readl(c)); __r; })
+#endif
+#ifndef readq_relaxed
 #define readq_relaxed(c)	({ u64 __r = le64_to_cpu((__force __le64)__raw_readq(c)); __r; })
+#endif
 
+#ifndef writeb_relaxed
 #define writeb_relaxed(v,c)	((void)__raw_writeb((v),(c)))
+#endif
+#ifndef writew_relaxed
 #define writew_relaxed(v,c)	((void)__raw_writew((__force u16)cpu_to_le16(v),(c)))
+#endif
+#ifndef writel_relaxed
 #define writel_relaxed(v,c)	((void)__raw_writel((__force u32)cpu_to_le32(v),(c)))
+#endif
+#ifndef writeq_relaxed
 #define writeq_relaxed(v,c)	((void)__raw_writeq((__force u64)cpu_to_le64(v),(c)))
+#endif
+/*-P86801AA1-1797,wangkangmin.wt,ADD,20230626, add for gki build*/
 
 /*
  * I/O memory access primitives. Reads are ordered relative to any
