@@ -10,3 +10,16 @@ config MACH_GTA9PWIFI_EUR_OPEN
 	help
 	  support for Samsung GTA9PWiFi EUR OPENX device.
 
+config SEC_A23XQ_PROJECT
+	default n
+	bool "Samsung A23XQ Project"
+	help
+	  Support for Samsung A23XQ Project
+
+config MACH_A23XQ_EUR_OPEN
+	default n
+	bool "Samsung A23XQ EUR OPEN"
+	help
+	  Support for Samsung A23XQ EUR OPEN device.
+
+
