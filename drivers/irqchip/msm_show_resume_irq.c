@@ -11,3 +11,6 @@ int msm_show_resume_irq_mask = 1;
 
 module_param_named(
 	debug_mask, msm_show_resume_irq_mask, int, 0664);
+
+MODULE_DESCRIPTION("Qualcomm Technologies, Inc. IRQ Logging driver");
+MODULE_LICENSE("GPL v2");
