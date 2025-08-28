@@ -51,11 +51,11 @@ config SCSI_UFSHCD
 	  (the one containing the directory /) is located on a UFS device.
 
 config SCSI_UFSHCD_QTI
-	tristate "Universal Flash Storage Controller Driver Core QTI"
-	depends on SCSI && SCSI_DMA && QGKI && SCSI_UFSHCD
-	select PM_DEVFREQ
-	select DEVFREQ_GOV_SIMPLE_ONDEMAND
-	select NLS
+       tristate "Universal Flash Storage Controller Driver Core QTI"
+       depends on SCSI && SCSI_DMA && SCSI_UFSHCD
+       select PM_DEVFREQ
+       select DEVFREQ_GOV_SIMPLE_ONDEMAND
+       select NLS
 	help
 	This selects the support for QTI UFS devices in Linux, say Y and make
 	  sure that you know the name of your UFS host adapter (the card
@@ -181,7 +181,7 @@ config SCSI_UFS_BSG
 	  If unsure, say N.
 
 config SCSI_UFS_CRYPTO
-	bool "UFS Crypto Engine Support"
+	tristate "UFS Crypto Engine Support"
 	depends on SCSI_UFSHCD && BLK_INLINE_ENCRYPTION
 	help
 	  Enable Crypto Engine Support in UFS.
